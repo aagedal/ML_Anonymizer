@@ -27,7 +27,7 @@
 			<key>com.apple.protocol</key>
 			<string>FxPlug</string>
 			<key>com.apple.version</key>
-			<string>1.3</string>
+			<string>1.4</string>
 		</dict>
 		<key>PrincipalClass</key>
 		<string>FxPrincipal</string>
@@ -69,7 +69,7 @@
 			<key>uuid</key>
 			<string>@ANON_FX_PLUGIN_UUID@</string>
 			<key>version</key>
-			<string>1.3</string>
+			<string>1.4</string>
 		</dict>
 	</array>
 	<key>XPCService</key>

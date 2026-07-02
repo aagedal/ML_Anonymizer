@@ -27,6 +27,7 @@ struct AnonRenderSettings
 	float mosaicSize;
 	uint32_t seed;
 	bool blackout;
+	int mosaicShape;
 };
 
 /*
@@ -41,6 +42,7 @@ typedef struct
 	int mHeight;
 	int mBlurRadius;
 	int mBlurDir;
+	int mMosaicShape;
 	float mDistortAmount;
 	float mDistortScale;
 	float mBlurSigma;
@@ -74,6 +76,8 @@ static bool GetPipelines(id<MTLCommandQueue> p_Queue, AnonPipelines& outPipeline
 	NSError* err = nil;
 
 	MTLCompileOptions* options = [MTLCompileOptions new];
+	// Precise math so cell/pixel selection matches the CPU path exactly.
+	options.fastMathEnabled = NO;
 	id<MTLLibrary> library = [device newLibraryWithSource:@(kAnonymizerMetalString) options:options error:&err];
 	[options release];
 	if (!library)
@@ -156,6 +160,7 @@ void RunMetalAnonymizer(void* p_CmdQ, int p_Width, int p_Height,
 	params.mBlurRadius = std::min((int)ceilf(p_Settings.blurRadius), 512);
 	params.mBlurSigma = std::max(p_Settings.blurRadius * 0.5f, 0.1f);
 	params.mMosaicSize = p_Settings.mosaicSize;
+	params.mMosaicShape = p_Settings.mosaicShape;
 	params.mSeed = p_Settings.seed;
 
 	id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];

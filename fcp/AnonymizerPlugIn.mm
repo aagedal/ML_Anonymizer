@@ -24,6 +24,7 @@ enum
 	kParamID_Seed = 5,
 	kParamID_TemporalJitter = 6,
 	kParamID_Blackout = 7,
+	kParamID_MosaicShape = 8,
 };
 
 typedef struct
@@ -34,6 +35,7 @@ typedef struct
 	double mosaicSize;
 	uint32_t seed;
 	int32_t blackout;
+	int32_t mosaicShape;
 } AnonFxState;
 
 /*
@@ -48,6 +50,7 @@ typedef struct
 	int mHeight;
 	int mBlurRadius;
 	int mBlurDir;
+	int mMosaicShape;
 	float mDistortAmount;
 	float mDistortScale;
 	float mBlurSigma;
@@ -150,6 +153,11 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	                                 parameterID:kParamID_Blackout
 	                                defaultValue:NO
 	                              parameterFlags:kFxParameterFlag_DEFAULT];
+	ok = ok && [paramAPI addPopupMenuWithName:@"Mosaic Shape"
+	                              parameterID:kParamID_MosaicShape
+	                             defaultValue:0
+	                              menuEntries:@[@"Square", @"Triangle", @"Hexagon"]
+	                           parameterFlags:kFxParameterFlag_DEFAULT];
 
 	if (!ok && error != NULL)
 		*error = [NSError errorWithDomain:FxPlugErrorDomain
@@ -188,6 +196,9 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	[paramAPI getBoolValue:&jitterState fromParameter:kParamID_TemporalJitter atTime:renderTime];
 	[paramAPI getBoolValue:&blackoutState fromParameter:kParamID_Blackout atTime:renderTime];
 	state.blackout = blackoutState ? 1 : 0;
+	int shapeValue = 0;
+	[paramAPI getIntValue:&shapeValue fromParameter:kParamID_MosaicShape atTime:renderTime];
+	state.mosaicShape = (shapeValue >= 0 && shapeValue <= 2) ? shapeValue : 0;
 
 	// Frame index for the temporal jitter, derived from the timeline frame
 	// rate. Falls back to seconds * 30 if the timing API is unavailable.
@@ -315,6 +326,7 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	params.mDistortScale = fmaxf((float)state.distortScale * ds, 2.0f);
 	params.mBlurSigma = fmaxf((float)state.blurRadius * ds * 0.5f, 0.1f);
 	params.mMosaicSize = (float)state.mosaicSize * ds;
+	params.mMosaicShape = state.mosaicShape;
 	params.mSeed = state.seed;
 
 	id<MTLCommandBuffer> commandBuffer = [cache.queue commandBuffer];

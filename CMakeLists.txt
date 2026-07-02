@@ -8,9 +8,10 @@ if(NOT APPLE)
 	message(FATAL_ERROR "This project currently targets macOS (Metal) only.")
 endif()
 
-# Universal binary so the plugin loads in both Apple Silicon and Intel Premiere.
+# Apple Silicon only by default; pass -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+# for a universal build if Intel Macs must be supported.
 if(NOT CMAKE_OSX_ARCHITECTURES)
-	set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
+	set(CMAKE_OSX_ARCHITECTURES "arm64")
 endif()
 if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
 	set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0")
@@ -28,7 +29,7 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/editions/${ANON_EDITION}.cmake")
 endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/editions/${ANON_EDITION}.cmake")
 
-set(ANON_VERSION "1.3.0")
+set(ANON_VERSION "1.4.0")
 
 # Branding values consumed by scripts/make_pkg.sh and the install scripts.
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/edition.sh"

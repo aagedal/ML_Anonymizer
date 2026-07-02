@@ -94,6 +94,12 @@ PF_Err ParamsSetup(
 	PF_ADD_CHECKBOXX("Blackout",
 		FALSE, 0, ANON_BLACKOUT);
 
+	AEFX_CLR_STRUCT(def);
+	PF_ADD_POPUP("Mosaic Shape",
+		3, ANON_SHAPE_SQUARE + 1,
+		"Square|Triangle|Hexagon",
+		ANON_MOSAIC_SHAPE);
+
 	out_data->num_params = ANON_NUM_PARAMS;
 	return PF_Err_NONE;
 }
@@ -121,6 +127,10 @@ PF_Err Render(
 	float mosaicSize = (float)params[ANON_MOSAIC_SIZE]->u.fs_d.value * ds;
 	double seedParam = params[ANON_SEED]->u.fs_d.value;
 	bool jitter = params[ANON_TEMPORAL_JITTER]->u.bd.value != 0;
+	// Popup values are 1-based.
+	int mosaicShape = params[ANON_MOSAIC_SHAPE]->u.pd.value - 1;
+	if (mosaicShape < ANON_SHAPE_SQUARE || mosaicShape > ANON_SHAPE_HEXAGON)
+		mosaicShape = ANON_SHAPE_SQUARE;
 
 	int32_t frame = 0;
 	if (in_data->time_step != 0)
@@ -190,7 +200,7 @@ PF_Err Render(
 
 	// Layer 1: random distortion, Layer 2: separable Gaussian blur,
 	// Layer 3: mosaic. Result lands back in bufA.
-	RunLayeredPasses(bufA.data(), bufB.data(), w, h, amount, scale, blurRadius, mosaicSize, seed);
+	RunLayeredPasses(bufA.data(), bufB.data(), w, h, amount, scale, blurRadius, mosaicSize, mosaicShape, seed);
 
 	// Store to the output world.
 	if (isFloatWorld)

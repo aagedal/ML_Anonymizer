@@ -32,7 +32,10 @@
 	NSString* source = [NSString stringWithFormat:@"%s\n%s",
 		kAnonymizerMetalString, kAnonymizerFxPlugExtraMetal];
 	NSError* error = nil;
-	_library = [device newLibraryWithSource:source options:nil error:&error];
+	// Precise math so cell/pixel selection matches the other hosts exactly.
+	MTLCompileOptions* options = [[MTLCompileOptions alloc] init];
+	options.fastMathEnabled = NO;
+	_library = [device newLibraryWithSource:source options:options error:&error];
 	if (_library == nil)
 	{
 		NSLog(@"Anonymizer FxPlug: Metal library compile failed: %@", error);

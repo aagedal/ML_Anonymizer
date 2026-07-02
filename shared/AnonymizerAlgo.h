@@ -50,6 +50,16 @@
 */
 #define ANON_REFERENCE_HEIGHT 1080.0f
 
+/*
+** Mosaic cell shapes (popup order in every host UI).
+*/
+enum
+{
+	ANON_SHAPE_SQUARE = 0,
+	ANON_SHAPE_TRIANGLE = 1,
+	ANON_SHAPE_HEXAGON = 2,
+};
+
 static inline float AnonResolutionScale(int inFrameHeight)
 {
 	if (inFrameHeight <= 0)
@@ -204,7 +214,76 @@ inline void BlurPass(const float* src, float* dst, int w, int h, float radius, i
 	}
 }
 
-inline void MosaicPass(const float* src, float* dst, int w, int h, float blockSize)
+// Rounds halfway cases up, matching the MSL implementation exactly.
+inline float RoundHalfUp(float v)
+{
+	return floorf(v + 0.5f);
+}
+
+// Cell-center position for the triangle / hexagon tilings, in pixels.
+// Keep in sync with the MSL version in AnonymizerKernel.h.
+inline void MosaicCellCenter(float x, float y, float b, int shape, float* outX, float* outY)
+{
+	if (shape == ANON_SHAPE_TRIANGLE)
+	{
+		// Each b-sized square splits into two right triangles; the diagonal
+		// direction alternates in a checkerboard for a woven look.
+		float fx = x / b;
+		float fy = y / b;
+		float ixf = floorf(fx);
+		float iyf = floorf(fy);
+		float u = fx - ixf;
+		float v = fy - iyf;
+		float cx, cy;
+		if (((int)(ixf + iyf) & 1) == 0)
+		{
+			if (u > v) { cx = 2.0f / 3.0f; cy = 1.0f / 3.0f; }
+			else       { cx = 1.0f / 3.0f; cy = 2.0f / 3.0f; }
+		}
+		else
+		{
+			if (u + v < 1.0f) { cx = 1.0f / 3.0f; cy = 1.0f / 3.0f; }
+			else              { cx = 2.0f / 3.0f; cy = 2.0f / 3.0f; }
+		}
+		*outX = (ixf + cx) * b;
+		*outY = (iyf + cy) * b;
+	}
+	else // ANON_SHAPE_HEXAGON
+	{
+		// Pointy-top hexagonal grid via axial coordinates + cube rounding,
+		// sized so a hexagon is roughly b pixels tall.
+		float s = b * 0.5f;
+		float qa = 0.57735027f * x;
+		float qb = 0.33333333f * y;
+		float qn = qa - qb;
+		float qf = qn / s;
+		float rn = 0.66666667f * y;
+		float rf = rn / s;
+		float xf = qf;
+		float zf = rf;
+		float yf = -xf - zf;
+		float rx = RoundHalfUp(xf);
+		float ry = RoundHalfUp(yf);
+		float rz = RoundHalfUp(zf);
+		float dx = fabsf(rx - xf);
+		float dy = fabsf(ry - yf);
+		float dz = fabsf(rz - zf);
+		if (dx > dy && dx > dz)
+			rx = -ry - rz;
+		else if (dy > dz)
+			ry = -rx - rz;
+		else
+			rz = -rx - ry;
+		float hx = rz * 0.5f;
+		float hy = rx + hx;
+		float hz = s * 1.73205081f;
+		float vy = s * 1.5f;
+		*outX = hz * hy;
+		*outY = vy * rz;
+	}
+}
+
+inline void MosaicPass(const float* src, float* dst, int w, int h, float blockSize, int shape)
 {
 	int b = std::max(1, (int)(blockSize + 0.5f));
 	if (b <= 1)
@@ -215,10 +294,22 @@ inline void MosaicPass(const float* src, float* dst, int w, int h, float blockSi
 	for (int y = 0; y < h; ++y)
 	{
 		float* out = dst + (size_t)y * w * 4;
-		int sy = std::min((y / b) * b + b / 2, h - 1);
+		int sqy = std::min((y / b) * b + b / 2, h - 1);
 		for (int x = 0; x < w; ++x, out += 4)
 		{
-			int sx = std::min((x / b) * b + b / 2, w - 1);
+			int sx, sy;
+			if (shape == ANON_SHAPE_SQUARE)
+			{
+				sx = std::min((x / b) * b + b / 2, w - 1);
+				sy = sqy;
+			}
+			else
+			{
+				float cx, cy;
+				MosaicCellCenter((float)x, (float)y, (float)b, shape, &cx, &cy);
+				sx = std::min(std::max((int)RoundHalfUp(cx), 0), w - 1);
+				sy = std::min(std::max((int)RoundHalfUp(cy), 0), h - 1);
+			}
 			const float* p = PixAt(src, w, sx, sy);
 			out[0] = p[0];
 			out[1] = p[1];
@@ -231,12 +322,13 @@ inline void MosaicPass(const float* src, float* dst, int w, int h, float blockSi
 // Runs the full stack in place on a packed float buffer (any channel order),
 // using the caller's scratch buffer of the same size. Result lands in `buf`.
 inline void RunLayeredPasses(float* buf, float* scratch, int w, int h,
-	float amount, float scale, float blurRadius, float mosaicSize, uint32_t seed)
+	float amount, float scale, float blurRadius, float mosaicSize, int mosaicShape,
+	uint32_t seed)
 {
 	DistortPass(buf, scratch, w, h, amount, scale, seed);
 	BlurPass(scratch, buf, w, h, blurRadius, 0);
 	BlurPass(buf, scratch, w, h, blurRadius, 1);
-	MosaicPass(scratch, buf, w, h, mosaicSize);
+	MosaicPass(scratch, buf, w, h, mosaicSize, mosaicShape);
 }
 
 } // namespace AnonAlgo

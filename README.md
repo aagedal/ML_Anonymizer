@@ -29,6 +29,7 @@ attacker would have to jointly undo three lossy, keyed transforms.
 | Distortion Scale | 10 | Size of the noise features |
 | Blur Radius | 15 | Gaussian radius (sigma = radius/2) |
 | Mosaic Block Size | 25 | Pixelation block size |
+| Mosaic Shape | Square | Square, Triangle, or Hexagon tiling |
 | Random Seed | 0 | Change for a different distortion pattern |
 | Temporal Jitter | On | New distortion pattern every frame |
 | Blackout | Off | Solid black instead of the distort/blur/mosaic stack (source alpha preserved) |
@@ -52,7 +53,8 @@ playback previews look like the final render.
 
 ## Requirements
 
-- macOS (Apple Silicon or Intel; builds a universal binary)
+- macOS on Apple Silicon (arm64-only by default; configure with
+  `-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` for a universal build)
 - Xcode Command Line Tools, CMake 3.21+
 - Adobe **After Effects SDK** and **Premiere Pro SDK** (see below)
 - Premiere Pro with the renderer set to *Mercury Playback Engine GPU

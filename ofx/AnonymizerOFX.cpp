@@ -41,7 +41,7 @@
 	"stack with solid black."
 #define kPluginIdentifier ANON_OFX_PLUGIN_ID
 #define kPluginVersionMajor 1
-#define kPluginVersionMinor 3
+#define kPluginVersionMinor 4
 
 #define kSupportsTiles false
 #define kSupportsMultiResolution false
@@ -55,6 +55,7 @@ struct AnonRenderSettings
 	float mosaicSize;
 	uint32_t seed;
 	bool blackout;
+	int mosaicShape;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -148,7 +149,8 @@ void AnonymizerProcessor::computeFullCPU()
 	std::vector<float> scratch((size_t)w * h * 4);
 	AnonAlgo::RunLayeredPasses(_cpuResult.data(), scratch.data(), w, h,
 		_settings.distortAmount, _settings.distortScale,
-		_settings.blurRadius, _settings.mosaicSize, _settings.seed);
+		_settings.blurRadius, _settings.mosaicSize, _settings.mosaicShape,
+		_settings.seed);
 }
 
 void AnonymizerProcessor::multiThreadProcessImages(OfxRectI p_ProcWindow)
@@ -188,6 +190,7 @@ public:
 		m_Seed = fetchIntParam("seed");
 		m_TemporalJitter = fetchBooleanParam("temporalJitter");
 		m_Blackout = fetchBooleanParam("blackout");
+		m_MosaicShape = fetchChoiceParam("mosaicShape");
 	}
 
 	virtual void render(const OFX::RenderArguments& p_Args)
@@ -245,6 +248,10 @@ private:
 		settings.blurRadius = (float)m_BlurRadius->getValueAtTime(p_Args.time) * ds;
 		settings.mosaicSize = (float)m_MosaicSize->getValueAtTime(p_Args.time) * ds;
 		settings.blackout = m_Blackout->getValueAtTime(p_Args.time);
+		int shape = ANON_SHAPE_SQUARE;
+		m_MosaicShape->getValueAtTime(p_Args.time, shape);
+		settings.mosaicShape = (shape >= ANON_SHAPE_SQUARE && shape <= ANON_SHAPE_HEXAGON)
+			? shape : ANON_SHAPE_SQUARE;
 
 		// OFX time is in frames.
 		const bool jitter = m_TemporalJitter->getValueAtTime(p_Args.time);
@@ -269,6 +276,7 @@ private:
 	OFX::IntParam* m_Seed;
 	OFX::BooleanParam* m_TemporalJitter;
 	OFX::BooleanParam* m_Blackout;
+	OFX::ChoiceParam* m_MosaicShape;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -356,6 +364,15 @@ public:
 		blackout->setHint("Solid black instead of the distort/blur/mosaic stack (alpha preserved)");
 		blackout->setDefault(false);
 		page->addChild(*blackout);
+
+		ChoiceParamDescriptor* shape = p_Desc.defineChoiceParam("mosaicShape");
+		shape->setLabels("Mosaic Shape", "Mosaic Shape", "Mosaic Shape");
+		shape->setHint("Tiling used by the mosaic layer");
+		shape->appendOption("Square");
+		shape->appendOption("Triangle");
+		shape->appendOption("Hexagon");
+		shape->setDefault(ANON_SHAPE_SQUARE);
+		page->addChild(*shape);
 	}
 
 	virtual ImageEffect* createInstance(OfxImageEffectHandle p_Handle, ContextEnum /*p_Context*/)

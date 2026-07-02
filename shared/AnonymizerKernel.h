@@ -28,6 +28,7 @@ struct AnonParams
 	int height;
 	int blurRadius;
 	int blurDir;
+	int mosaicShape;  // 0 square, 1 triangle, 2 hexagon
 	float distortAmount;
 	float distortScale;
 	float blurSigma;
@@ -194,6 +195,67 @@ kernel void AnonBlackout(
 
 // ---- Layer 3: mosaic ----
 
+// Rounds halfway cases up, matching the C++ implementation exactly.
+inline float RoundHalfUp(float v)
+{
+	return floor(v + 0.5f);
+}
+
+// Cell-center position for the triangle / hexagon tilings, in pixels.
+// Keep in sync with the C++ version in AnonymizerAlgo.h.
+inline float2 MosaicCellCenter(float x, float y, float b, int shape)
+{
+	if (shape == 1) // triangle
+	{
+		float fx = x / b;
+		float fy = y / b;
+		float ixf = floor(fx);
+		float iyf = floor(fy);
+		float u = fx - ixf;
+		float v = fy - iyf;
+		float cx, cy;
+		if ((int(ixf + iyf) & 1) == 0)
+		{
+			if (u > v) { cx = 2.0f / 3.0f; cy = 1.0f / 3.0f; }
+			else       { cx = 1.0f / 3.0f; cy = 2.0f / 3.0f; }
+		}
+		else
+		{
+			if (u + v < 1.0f) { cx = 1.0f / 3.0f; cy = 1.0f / 3.0f; }
+			else              { cx = 2.0f / 3.0f; cy = 2.0f / 3.0f; }
+		}
+		return float2((ixf + cx) * b, (iyf + cy) * b);
+	}
+	// hexagon: pointy-top axial coordinates + cube rounding
+	float s = b * 0.5f;
+	float qa = 0.57735027f * x;
+	float qb = 0.33333333f * y;
+	float qn = qa - qb;
+	float qf = qn / s;
+	float rn = 0.66666667f * y;
+	float rf = rn / s;
+	float xf = qf;
+	float zf = rf;
+	float yf = -xf - zf;
+	float rx = RoundHalfUp(xf);
+	float ry = RoundHalfUp(yf);
+	float rz = RoundHalfUp(zf);
+	float dx = fabs(rx - xf);
+	float dy = fabs(ry - yf);
+	float dz = fabs(rz - zf);
+	if (dx > dy && dx > dz)
+		rx = -ry - rz;
+	else if (dy > dz)
+		ry = -rx - rz;
+	else
+		rz = -rx - ry;
+	float hx = rz * 0.5f;
+	float hy = rx + hx;
+	float hz = s * 1.73205081f;
+	float vy = s * 1.5f;
+	return float2(hz * hy, vy * rz);
+}
+
 kernel void AnonMosaic(
 	device const uchar* src [[buffer(0)]],
 	device uchar* dst [[buffer(1)]],
@@ -205,8 +267,18 @@ kernel void AnonMosaic(
 	int x = int(gid.x);
 	int y = int(gid.y);
 	int b = max(1, int(p.mosaicSize + 0.5f));
-	int sx = min((x / b) * b + b / 2, p.width - 1);
-	int sy = min((y / b) * b + b / 2, p.height - 1);
+	int sx, sy;
+	if (p.mosaicShape == 0 || b <= 1)
+	{
+		sx = min((x / b) * b + b / 2, p.width - 1);
+		sy = min((y / b) * b + b / 2, p.height - 1);
+	}
+	else
+	{
+		float2 c = MosaicCellCenter(float(x), float(y), float(b), p.mosaicShape);
+		sx = clamp(int(RoundHalfUp(c.x)), 0, p.width - 1);
+		sy = clamp(int(RoundHalfUp(c.y)), 0, p.height - 1);
+	}
 	StorePix(dst, p.dstPitch, x, y, p.is16f, LoadPix(src, p.srcPitch, sx, sy, p.is16f));
 }
 )MSLSRC";

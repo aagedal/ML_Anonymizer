@@ -35,6 +35,7 @@ typedef struct
 	int mHeight;
 	int mBlurRadius;
 	int mBlurDir;
+	int mMosaicShape;
 	float mDistortAmount;
 	float mDistortScale;
 	float mBlurSigma;
@@ -117,7 +118,11 @@ public:
 		NSString* source = [NSString stringWithCString:kAnonymizerMetalString encoding:NSUTF8StringEncoding];
 		NSError* error = nil;
 		id<MTLDevice> device = (id<MTLDevice>)mDeviceInfo.outDeviceHandle;
-		id<MTLLibrary> library = [[device newLibraryWithSource:source options:nil error:&error] autorelease];
+		// Precise math so cell/pixel selection matches the CPU path exactly;
+		// fast-math's approximate division flips mosaic cells at boundaries.
+		MTLCompileOptions* options = [[[MTLCompileOptions alloc] init] autorelease];
+		options.fastMathEnabled = NO;
+		id<MTLLibrary> library = [[device newLibraryWithSource:source options:options error:&error] autorelease];
 		result = CheckForMetalError(error);
 		if (result != suiteError_NoError)
 			return result;
@@ -204,6 +209,10 @@ public:
 		const double seedParam = GetParam(ANON_SEED, clipTime).mFloat64;
 		const bool jitter = GetParam(ANON_TEMPORAL_JITTER, clipTime).mBool != 0;
 		const bool blackout = GetParam(ANON_BLACKOUT, clipTime).mBool != 0;
+		// Popup values are 1-based.
+		int mosaicShape = (int)GetParam(ANON_MOSAIC_SHAPE, clipTime).mInt32 - 1;
+		if (mosaicShape < ANON_SHAPE_SQUARE || mosaicShape > ANON_SHAPE_HEXAGON)
+			mosaicShape = ANON_SHAPE_SQUARE;
 
 		int32_t frame = 0;
 		if (inRenderParams->inRenderTicksPerFrame != 0)
@@ -258,6 +267,7 @@ public:
 		params.mWidth = width;
 		params.mHeight = height;
 		params.mBlurRadius = blurRadiusInt;
+		params.mMosaicShape = mosaicShape;
 		params.mDistortAmount = distortAmount;
 		params.mDistortScale = distortScale;
 		params.mBlurSigma = blurSigma;

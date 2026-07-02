@@ -81,16 +81,6 @@ class Anonymizer :
 	public PrGPUFilterBase
 {
 public:
-	Anonymizer()
-		: mTmpA(0), mTmpB(0), mTmpBytes(0)
-	{
-	}
-
-	virtual ~Anonymizer()
-	{
-		FreeTemps();
-	}
-
 	virtual prSuiteError Initialize(
 		PrGPUFilterInstance* ioInstanceData)
 	{
@@ -244,12 +234,6 @@ public:
 			return suiteError_NoError;
 		}
 
-		// ---- Temp buffers (packed, pitch == width) ----
-		const size_t tmpBytes = (size_t)width * height * bytesPerPixel;
-		err = EnsureTemps(tmpBytes);
-		if (PrSuiteErrorFailed(err))
-			return err;
-
 		// ---- Encode the passes ----
 		ScopedAutoreleasePool pool;
 
@@ -259,8 +243,23 @@ public:
 
 		id<MTLBuffer> srcBuffer = (id<MTLBuffer>)srcFrameData;
 		id<MTLBuffer> dstBuffer = (id<MTLBuffer>)dstFrameData;
-		id<MTLBuffer> tmpA = (id<MTLBuffer>)mTmpA;
-		id<MTLBuffer> tmpB = (id<MTLBuffer>)mTmpB;
+
+		// Temp buffers (packed, pitch == width) are allocated per render and
+		// released by the command buffer's completion handler. Renders are
+		// committed asynchronously and may overlap or vary in size (preview
+		// vs full resolution), so instance-cached buffers would risk being
+		// freed while an earlier command buffer still reads them.
+		const size_t tmpBytes = (size_t)width * height * bytesPerPixel;
+		id<MTLDevice> device = (id<MTLDevice>)mDeviceInfo.outDeviceHandle;
+		id<MTLBuffer> tmpA = [device newBufferWithLength:tmpBytes options:MTLResourceStorageModePrivate];
+		id<MTLBuffer> tmpB = [device newBufferWithLength:tmpBytes options:MTLResourceStorageModePrivate];
+		if (tmpA == nil || tmpB == nil)
+		{
+			[tmpA release];
+			[tmpB release];
+			[encoder endEncoding];
+			return suiteError_OutOfMemory;
+		}
 
 		AnonParamsHost params = {};
 		params.m16f = is16f;
@@ -296,6 +295,10 @@ public:
 		Dispatch(encoder, mPipelines[kKernelMosaic], tmpA, dstBuffer, params);
 
 		[encoder endEncoding];
+		[commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> cb) {
+			[tmpA release];
+			[tmpB release];
+		}];
 		[commandBuffer commit];
 
 		return suiteError_NoError;
@@ -321,43 +324,8 @@ private:
 		[inEncoder dispatchThreadgroups:numThreadgroups threadsPerThreadgroup:threadsPerGroup];
 	}
 
-	prSuiteError EnsureTemps(size_t inBytes)
-	{
-		if (inBytes <= mTmpBytes && mTmpA && mTmpB)
-			return suiteError_NoError;
-		FreeTemps();
-		prSuiteError err = mGPUDeviceSuite->AllocateDeviceMemory(mDeviceIndex, inBytes, &mTmpA);
-		if (PrSuiteErrorFailed(err))
-			return err;
-		err = mGPUDeviceSuite->AllocateDeviceMemory(mDeviceIndex, inBytes, &mTmpB);
-		if (PrSuiteErrorFailed(err))
-		{
-			FreeTemps();
-			return err;
-		}
-		mTmpBytes = inBytes;
-		return suiteError_NoError;
-	}
-
-	void FreeTemps()
-	{
-		if (mTmpA)
-		{
-			mGPUDeviceSuite->FreeDeviceMemory(mDeviceIndex, mTmpA);
-			mTmpA = 0;
-		}
-		if (mTmpB)
-		{
-			mGPUDeviceSuite->FreeDeviceMemory(mDeviceIndex, mTmpB);
-			mTmpB = 0;
-		}
-		mTmpBytes = 0;
-	}
 
 	id<MTLComputePipelineState> mPipelines[kKernelCount];
-	void* mTmpA;
-	void* mTmpB;
-	size_t mTmpBytes;
 };
 
 

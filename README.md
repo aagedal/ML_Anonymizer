@@ -102,16 +102,24 @@ has been targeted; non-Metal hosts use the CPU path.
 
 With the [FxPlug 4 SDK](https://developer.apple.com/download/all/?q=FxPlug)
 installed, the build also produces `build/Multi-Layer Anonymizer.app` — an
-FxPlug wrapper app carrying the effect as an XPC service. Install with:
+FxPlug wrapper app carrying the effect as an XPC service, plus the Motion
+template FCP needs (bundled in the app's Resources). Install with:
 
 ```sh
-./scripts/install_fxplug.sh   # copies to /Applications and registers with PluginKit
+./scripts/install_fxplug.sh   # copies to /Applications, registers, installs the template
 ```
 
-Restart Final Cut Pro; the effect appears in the Effects browser under
+Launching the app once registers the plugin with PluginKit and copies the
+Motion template into `~/Movies/Motion Templates.localized/`. Restart Final
+Cut Pro; the effect appears in the Effects browser under
 **Aagedal → Multi-Layer Anonymizer**. Use FCP's Draw Mask/Shape Mask on the
 effect to confine it. Notes:
 
+- **Final Cut Pro never lists raw FxPlug filters** — they only appear
+  through a published Motion template (this is how all FxPlug products
+  ship). End users do not need Motion; the pre-published template in
+  `fcp/templates/` is installed for them. Re-publish the template in Motion
+  only if the parameter set changes.
 - The build signs with your best available identity (Developer ID, then
   Apple Development, then ad-hoc; override with `SIGN_IDENTITY=`). The XPC
   service **must** be signed with the sandbox entitlement — PluginKit

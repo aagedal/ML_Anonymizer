@@ -54,12 +54,26 @@ done
 cp "$APP_BIN" "$APP/Contents/MacOS/$APP_NAME"
 cp "$BUILD/fcp-plists/Info-App.plist" "$APP/Contents/Info.plist"
 
+# Bundle the Motion templates for this edition; the app installs them into
+# the user's ~/Movies/Motion Templates on first launch (FCP only shows
+# FxPlug effects through a Motion template).
+if [ -d "$SRC/fcp/templates/$EDITION/Effects" ]; then
+	mkdir -p "$APP/Contents/Resources/Motion Templates"
+	cp -R "$SRC/fcp/templates/$EDITION/Effects" "$APP/Contents/Resources/Motion Templates/"
+	# Motion-authored files can carry Finder info / resource forks, which
+	# codesign rejects ("detritus not allowed").
+	xattr -rc "$APP/Contents/Resources/Motion Templates" 2>/dev/null || true
+else
+	echo "warning: no Motion templates at fcp/templates/$EDITION/Effects" >&2
+fi
+
 # Sign inside-out. Both the service and the app are sandboxed - PluginKit
 # refuses to register extensions that are not (compare Apple's own
 # InternalFiltersXPC.pluginkit inside Final Cut Pro).
 codesign --force --sign "$IDENTITY" \
 	--entitlements "$SRC/fcp/Sandbox.entitlements" "$SVC"
+# The app additionally gets ~/Movies access for Motion template installation.
 codesign --force --sign "$IDENTITY" \
-	--entitlements "$SRC/fcp/Sandbox.entitlements" "$APP"
+	--entitlements "$SRC/fcp/SandboxApp.entitlements" "$APP"
 
 echo "Assembled $APP"

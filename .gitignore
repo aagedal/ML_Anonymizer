@@ -5,6 +5,8 @@ build-*/
 # Non-public branded editions (only oss is part of the open-source release)
 editions/*
 !editions/oss.cmake
+fcp/templates/*
+!fcp/templates/oss/
 
 # Adobe SDK headers - licensed by Adobe, do not redistribute.
 # Download officially: https://developer.adobe.com/console/servicesandapis

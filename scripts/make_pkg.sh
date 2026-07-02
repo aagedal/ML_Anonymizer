@@ -70,7 +70,7 @@ if [ -d "$FCP_APP" ]; then
 		"$PKGROOT/component-fcp.pkg"
 	FCP_CHOICE_OUTLINE='<line choice="finalcut"/>'
 	FCP_CHOICE='<choice id="finalcut" title="Final Cut Pro plugin (FxPlug)"
-		description="Installs the '$APP_NAME' app into /Applications. Launch it once after installing to register the effect with Final Cut Pro and Motion.">
+		description="Installs the '$APP_NAME' app into /Applications. Launch it once after installing: it registers the effect and installs the Final Cut Pro template (Motion is not required).">
 		<pkg-ref id="'$ID_FCP'"/>
 	</choice>'
 	FCP_PKGREF='<pkg-ref id="'$ID_FCP'" version="'$VERSION'" onConclusion="none">component-fcp.pkg</pkg-ref>'

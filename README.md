@@ -9,11 +9,16 @@ effect:
    a pseudo-random field, destroying the pixel-to-pixel correspondence that
    deblurring and mosaic-reversal tools rely on.
 2. **Gaussian blur** — removes the high-frequency detail.
-3. **Mosaic** — pixelates the result.
+3. **Mosaic** — pixelates the result, with a square, triangle, or hexagon
+   tiling (a purely cosmetic choice — all three sample the same way).
 
 | Before | After (default settings) |
 |---|---|
 | ![before](docs/before.png) | ![after](docs/after.png) |
+
+| Triangle mosaic | Hexagon mosaic |
+|---|---|
+| ![triangle](docs/shape-triangle.png) | ![hexagon](docs/shape-hexagon.png) |
 
 **Why multiple layers?** A plain blur is a (roughly) invertible convolution, and
 plain mosaic averages are increasingly recoverable with ML reconstruction. Here,
@@ -48,15 +53,14 @@ a fixed transform across frames (and looks "alive"); **off** gives a static
 warp, which avoids any multi-frame averaging of a static background revealing
 detail. For moving subjects, keep it on.
 
-Pixel-space parameters scale with preview downsampling, so half-resolution
-playback previews look like the final render.
-
 ## Requirements
 
 - macOS on Apple Silicon (arm64-only by default; configure with
   `-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` for a universal build)
 - Xcode Command Line Tools, CMake 3.21+
 - Adobe **After Effects SDK** and **Premiere Pro SDK** (see below)
+- Apple **FxPlug 4 SDK** (optional — only needed for the Final Cut Pro
+  plugin; the build skips it when the SDK is absent)
 - Premiere Pro with the renderer set to *Mercury Playback Engine GPU
   Acceleration (Metal)* for the GPU path; *Software Only* uses the CPU path
   (identical output, verified to ~1e-7)
@@ -87,6 +91,11 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ./scripts/install.sh   # copies to /Library/.../Adobe/Common/Plug-ins/7.0/MediaCore (sudo)
 ```
+
+Restart Premiere Pro. The effect appears in the Effects panel under
+**Video Effects → Aagedal → Multi-Layer Anonymizer**. To limit it to a face or
+plate, use Premiere's built-in effect masks in the Effect Controls panel
+(ellipse/pen mask + tracking), like with any other effect.
 
 ### DaVinci Resolve (OpenFX)
 
@@ -141,8 +150,14 @@ To distribute instead of installing directly, build an installer package
 containing all plugins (each selectable at install time):
 
 ```sh
-./scripts/make_pkg.sh  # -> build/MultiLayerAnonymizer-1.1.0.pkg
+./scripts/make_pkg.sh  # -> build/MultiLayerAnonymizer-<version>.pkg
 ```
+
+The pkg installs the plugins system-wide. For recipients outside your own
+machine, sign it (`SIGN_IDENTITY="Developer ID Installer: ..."
+./scripts/make_pkg.sh`) and notarize (`xcrun notarytool submit ... --wait`,
+then `xcrun stapler staple`); unsigned packages downloaded from the internet
+are blocked by Gatekeeper until right-click → Open.
 
 ### Branded editions
 
@@ -163,20 +178,9 @@ Differently-branded builds share every line of algorithm code, render
 identically, and can be installed side by side. All `scripts/*.sh` accept
 the build directory as their first argument (default `build`).
 
-The pkg installs the plugin into the MediaCore folder for all users. For
-recipients outside your own machine, sign it (`SIGN_IDENTITY="Developer ID
-Installer: ..." ./scripts/make_pkg.sh`) and notarize (`xcrun notarytool submit
-... --wait`, then `xcrun stapler staple`); unsigned packages downloaded from
-the internet are blocked by Gatekeeper until right-click → Open.
-
-Restart Premiere Pro. The effect appears in the Effects panel under
-**Video Effects → Aagedal → Multi-Layer Anonymizer**. To limit it to a face or
-plate, use Premiere's built-in effect masks in the Effect Controls panel
-(ellipse/pen mask + tracking), like with any other effect.
-
 ## How it works
 
-The algorithm lives in `shared/` and is compiled into both host plugins:
+The algorithm lives in `shared/` and is compiled into all three host plugins:
 
 - `shared/AnonymizerAlgo.h` — the CPU passes, noise/hash functions, and the
   parameter ranges/defaults, host-independent.
@@ -190,8 +194,9 @@ with a Premiere GPU filter (`xGPUFilterEntry`) in the same binary — the
 pattern used by Adobe's `SDK_ProcAmp` sample; Premiere binds the GPU filter to
 the effect through the PiPL. Per frame the GPU path encodes four compute
 dispatches with no CPU readbacks: `distort → blur H → blur V → mosaic`,
-ping-ponging through two cached device buffers allocated via
-`PrSDKGPUDeviceSuite` (so Premiere's VRAM accounting sees them).
+ping-ponging through two temp buffers allocated per render and released by
+the command buffer's completion handler (renders overlap and vary in size,
+so instance-cached buffers would race).
 
 **DaVinci Resolve** (`ofx/`): an OpenFX image effect built on Blackmagic's
 OFX Support library, following their `GainPlugin` sample. Resolve passes
@@ -232,6 +237,6 @@ terms (see the SDKs section above).
 ## Extending to Windows
 
 The CPU path is already portable. For GPU on Windows, add CUDA/DirectX
-variants of the three kernels (see Adobe's `SDK_ProcAmp` sample for the CUDA
+variants of the kernels (see Adobe's `SDK_ProcAmp` sample for the CUDA
 scaffolding) and a `.rc`/`PiPLtool` step for the PiPL; `Anonymizer_GPU.mm`
 would split into a shared host file plus per-API dispatch.

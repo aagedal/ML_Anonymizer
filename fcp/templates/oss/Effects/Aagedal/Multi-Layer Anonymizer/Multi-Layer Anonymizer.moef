@@ -54,7 +54,7 @@
 	<resolutionMode>0</resolutionMode>
 	<dynamicResolution>1</dynamicResolution>
 	<viewmode>0</viewmode>
-	<overlayOptions>125708</overlayOptions>
+	<overlayOptions>125452</overlayOptions>
 	<oscOptions>30</oscOptions>
 	<compensateAspectRatio>1</compensateAspectRatio>
 	<renderFields>0</renderFields>
@@ -162,28 +162,27 @@
 	</sceneSettings>
 	<publishSettings>
 		<version>2</version>
-		<target object="10013" channel="./1" name="Distortion Amount"/>
-		<target object="10013" channel="./2" name="Distortion Scale"/>
-		<target object="10013" channel="./3" name="Blur Radius"/>
-		<target object="10013" channel="./4" name="Mosaic Block Size"/>
-		<target object="10013" channel="./5" name="Random Seed"/>
-		<target object="10013" channel="./6" name="Temporal Jitter"/>
-		<target object="10013" channel="./7" name="Blackout"/>
+		<target object="10132" channel="./1" name="Distortion Amount"/>
+		<target object="10132" channel="./2" name="Distortion Scale"/>
+		<target object="10132" channel="./3" name="Blur Radius"/>
+		<target object="10132" channel="./4" name="Mosaic Block Size"/>
+		<target object="10132" channel="./5" name="Random Seed"/>
+		<target object="10132" channel="./6" name="Temporal Jitter"/>
+		<target object="10132" channel="./7" name="Blackout"/>
+		<target object="10132" channel="./8" name="Mosaic Shape"/>
 	</publishSettings>
 	<currentFrame>0 1 1 0</currentFrame>
-	<currentObject>10003</currentObject>
-	<activeLayer>10003</activeLayer>
+	<currentObject>10126</currentObject>
+	<activeLayer>10126</activeLayer>
 	<timeRange offset="0 1 1 0" duration="1536000 153600 1 0"/>
 	<playRange offset="0 1 1 0" duration="1536000 153600 1 0"/>
 	<flags>1</flags>
 	<audioTracks>0</audioTracks>
 	<timemarkerset/>
 	<guideset/>
-	<curvesets selected="11">
-		<curveset name="Untitled Set" shortcut="" relative="0"/>
-	</curvesets>
-	<scenenode name="Project" id="10000" factoryID="4" version="5">
-		<scenenode name="Widget" id="10002" factoryID="2" version="5">
+	<curvesets selected="1"/>
+	<scenenode name="Project" id="10124" factoryID="4" version="5">
+		<scenenode name="Widget" id="10125" factoryID="2" version="5">
 			<flags>0</flags>
 			<timing in="0 1 1 0" out="-3072 153600 1 0" offset="0 1 1 0"/>
 			<foldFlags>0</foldFlags>
@@ -203,10 +202,10 @@
 		<parameter name="Properties" id="1" flags="8589938704"/>
 		<parameter name="Object" id="2" flags="8589938704"/>
 	</scenenode>
-	<layer name="Group" id="10003">
-		<scenenode name="Effect Source" id="10007" factoryID="3" version="5">
+	<layer name="Group" id="10126">
+		<scenenode name="Effect Source" id="10129" factoryID="3" version="5">
 			<validTracks>1</validTracks>
-			<aspectRatio>1</aspectRatio>
+			<aspectRatio>0</aspectRatio>
 			<flags>0</flags>
 			<timing in="0 1 1 0" out="1532928 153600 1 0" offset="0 1 1 0"/>
 			<foldFlags>16384</foldFlags>
@@ -234,7 +233,7 @@
 					<parameter name="PQ Peak (nits)" id="248" flags="8606744592" default="1000" value="1000"/>
 				</parameter>
 				<parameter name="Media" id="324" flags="8589938704">
-					<parameter name="Source Media" id="300" flags="81621221392" default="10005" value="10005"/>
+					<parameter name="Source Media" id="300" flags="81621221392" default="10127" value="10127"/>
 					<parameter name="Source Media" id="325" flags="8590000146"/>
 				</parameter>
 				<parameter name="Page Number" id="301" flags="8589934610" default="1" value="1"/>
@@ -288,7 +287,7 @@
 			<parameter name="Aperture Width" id="312" flags="12884901906" default="3840" value="3840"/>
 			<parameter name="Aperture Height" id="313" flags="12884901906" default="2160" value="2160"/>
 		</parameter>
-		<filter name="Multi-Layer Anonymizer" id="10013" factoryID="6" pluginUUID="211035B9-C3CF-42E6-B8CB-F9C28DC3B98A" pluginVersion="1" pluginName="Multi-Layer Anonymizer" pluginDynamicParams="0">
+		<filter name="Multi-Layer Anonymizer" id="10132" factoryID="6" pluginUUID="211035B9-C3CF-42E6-B8CB-F9C28DC3B98A" pluginVersion="1" pluginName="Multi-Layer Anonymizer" pluginDynamicParams="0">
 			<timing in="0 1 1 0" out="1532928 153600 1 0" offset="0 1 1 0"/>
 			<baseFlags>8589934609</baseFlags>
 			<parameter name="Distortion Amount" id="1" flags="12901679120" default="15" value="15"/>
@@ -298,14 +297,15 @@
 			<parameter name="Random Seed" id="5" flags="12901679120" default="0" value="0"/>
 			<parameter name="Temporal Jitter" id="6" flags="12901679120" default="1" value="1"/>
 			<parameter name="Blackout" id="7" flags="12901679120" default="0" value="0"/>
+			<parameter name="Mosaic Shape" id="8" flags="12901679120" default="0" value="0"/>
 			<parameter name="Mix" id="10001" flags="12901679104" default="1" value="1"/>
 			<parameter name="Flip" id="10002" flags="12905938976" default="0" value="0"/>
 			<parameter name="Input Points" id="10003" flags="12905938976" default="1" value="1"/>
 		</filter>
 	</layer>
 
-	<footage name="Media Layer" id="10006">
-		<clip name="Effect Source" id="10005">
+	<footage name="Media Layer" id="10128">
+		<clip name="Effect Source" id="10127">
 			<pathURL>Drop Zone.tiff</pathURL>
 			<missingWidth>1200</missingWidth>
 			<missingHeight>1200</missingHeight>

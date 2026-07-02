@@ -1,0 +1,13 @@
+# Build output
+build/
+build-*/
+
+# Non-public branded editions (only oss is part of the open-source release)
+editions/*
+!editions/oss.cmake
+
+# Adobe SDK headers - licensed by Adobe, do not redistribute.
+# Download officially: https://developer.adobe.com/console/servicesandapis
+sdk/
+
+.DS_Store

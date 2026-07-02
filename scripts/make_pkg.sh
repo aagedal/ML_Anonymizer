@@ -43,31 +43,38 @@ fi
 # Installer restores it as an invisible xattr, no ._ files land on disk.
 xattr -rc "$PKGROOT/payload" "$PKGROOT/payload-ofx" "$PKGROOT/payload-fcp" 2>/dev/null || true
 
-# Component packages, one per host plugin format.
-pkgbuild \
-	--root "$PKGROOT/payload" \
-	--install-location "$INSTALL_LOCATION" \
-	--identifier "$ID_PREMIERE" \
-	--version "$VERSION" \
-	"$PKGROOT/component-premiere.pkg"
+# Builds one component package with bundle relocation disabled. Without
+# this, macOS Installer "helpfully" installs onto any existing copy of the
+# bundle Spotlight can find (e.g. a build directory) instead of the intended
+# install location.
+build_component() {
+	_root="$1"; _location="$2"; _identifier="$3"; _out="$4"
+	_plist="$PKGROOT/$(basename "$_out").components.plist"
+	pkgbuild --analyze --root "$_root" "$_plist" > /dev/null
+	_count=$(plutil -convert json -o - "$_plist" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')
+	_i=0
+	while [ "$_i" -lt "$_count" ]; do
+		plutil -replace "$_i.BundleIsRelocatable" -bool false "$_plist"
+		_i=$((_i + 1))
+	done
+	pkgbuild \
+		--root "$_root" \
+		--component-plist "$_plist" \
+		--install-location "$_location" \
+		--identifier "$_identifier" \
+		--version "$VERSION" \
+		"$_out"
+}
 
-pkgbuild \
-	--root "$PKGROOT/payload-ofx" \
-	--install-location "$OFX_INSTALL_LOCATION" \
-	--identifier "$ID_OFX" \
-	--version "$VERSION" \
-	"$PKGROOT/component-ofx.pkg"
+# Component packages, one per host plugin format.
+build_component "$PKGROOT/payload" "$INSTALL_LOCATION" "$ID_PREMIERE" "$PKGROOT/component-premiere.pkg"
+build_component "$PKGROOT/payload-ofx" "$OFX_INSTALL_LOCATION" "$ID_OFX" "$PKGROOT/component-ofx.pkg"
 
 FCP_CHOICE_OUTLINE=""
 FCP_CHOICE=""
 FCP_PKGREF=""
 if [ -d "$FCP_APP" ]; then
-	pkgbuild \
-		--root "$PKGROOT/payload-fcp" \
-		--install-location "/Applications" \
-		--identifier "$ID_FCP" \
-		--version "$VERSION" \
-		"$PKGROOT/component-fcp.pkg"
+	build_component "$PKGROOT/payload-fcp" "/Applications" "$ID_FCP" "$PKGROOT/component-fcp.pkg"
 	FCP_CHOICE_OUTLINE='<line choice="finalcut"/>'
 	FCP_CHOICE='<choice id="finalcut" title="Final Cut Pro plugin (FxPlug)"
 		description="Installs the '$APP_NAME' app into /Applications. Launch it once after installing: it registers the effect and installs the Final Cut Pro template (Motion is not required).">

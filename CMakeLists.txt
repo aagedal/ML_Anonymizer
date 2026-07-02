@@ -218,16 +218,27 @@ if(EXISTS "${FXPLUG_FRAMEWORK_DIR}/FxPlug.framework")
 	configure_file(fcp/Info-App.plist.in "${CMAKE_CURRENT_BINARY_DIR}/fcp-plists/Info-App.plist" @ONLY)
 	configure_file(fcp/version.plist.in "${CMAKE_CURRENT_BINARY_DIR}/fcp-plists/version.plist" @ONLY)
 
-	add_custom_command(TARGET AnonymizerFxPlugApp POST_BUILD
+	# Assemble as a separate target driven by both binaries, so a change to
+	# either the app or the XPC service re-assembles the bundle.
+	set(FXPLUG_APP_STAMP "${CMAKE_CURRENT_BINARY_DIR}/fxplug-app.stamp")
+	add_custom_command(
+		OUTPUT "${FXPLUG_APP_STAMP}"
 		COMMAND /bin/sh "${CMAKE_CURRENT_SOURCE_DIR}/scripts/assemble_fxplug.sh"
 			"${CMAKE_CURRENT_BINARY_DIR}"
 			"${CMAKE_CURRENT_SOURCE_DIR}"
 			"$<TARGET_FILE:AnonymizerFxPlugApp>"
 			"$<TARGET_FILE:AnonymizerFxPlugService>"
+		COMMAND ${CMAKE_COMMAND} -E touch "${FXPLUG_APP_STAMP}"
+		DEPENDS
+			AnonymizerFxPlugApp
+			AnonymizerFxPlugService
+			"${CMAKE_CURRENT_SOURCE_DIR}/scripts/assemble_fxplug.sh"
+			"${CMAKE_CURRENT_BINARY_DIR}/fcp-plists/Info-Service.plist"
+			"${CMAKE_CURRENT_BINARY_DIR}/fcp-plists/Info-App.plist"
 		COMMENT "Assembling and signing ${ANON_APP_NAME}.app (FxPlug)"
 		VERBATIM
 	)
-	add_dependencies(AnonymizerFxPlugApp AnonymizerFxPlugService)
+	add_custom_target(AnonymizerFxPlugBundle ALL DEPENDS "${FXPLUG_APP_STAMP}")
 else()
 	message(STATUS "FxPlug SDK not found - skipping the Final Cut Pro plugin")
 endif()

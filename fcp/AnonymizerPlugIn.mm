@@ -62,7 +62,6 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 
 - (nullable instancetype)initWithAPIManager:(id<PROAPIAccessing>)newApiManager
 {
-	NSLog(@"AnonymizerFxPlugIn: initWithAPIManager %p", newApiManager);
 	self = [super init];
 	if (self != nil)
 	{
@@ -74,7 +73,6 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 - (BOOL)properties:(NSDictionary * _Nonnull *)properties
              error:(NSError * _Nullable *)error
 {
-	NSLog(@"AnonymizerFxPlugIn: properties called");
 	*properties = @{
 		kFxPropertyKey_MayRemapTime : @NO,
 		kFxPropertyKey_PixelTransformSupport : @(kFxPixelTransform_ScaleTranslate),
@@ -88,7 +86,6 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 {
 	id<FxParameterCreationAPI_v5> paramAPI =
 		[_apiManager apiForProtocol:@protocol(FxParameterCreationAPI_v5)];
-	NSLog(@"AnonymizerFxPlugIn: addParameters, paramAPI=%p", paramAPI);
 	if (paramAPI == nil)
 	{
 		if (error != NULL)
@@ -154,7 +151,6 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	                                defaultValue:NO
 	                              parameterFlags:kFxParameterFlag_DEFAULT];
 
-	NSLog(@"AnonymizerFxPlugIn: addParameters result=%d", (int)ok);
 	if (!ok && error != NULL)
 		*error = [NSError errorWithDomain:FxPlugErrorDomain
 		                             code:kFxError_InvalidParameter

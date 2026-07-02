@@ -199,8 +199,9 @@ public:
 		const double seedParam = GetParam(ANON_SEED, clipTime).mFloat64;
 		const bool jitter = GetParam(ANON_TEMPORAL_JITTER, clipTime).mBool != 0;
 		const bool blackout = GetParam(ANON_BLACKOUT, clipTime).mBool != 0;
-		// Popup values are 1-based.
-		int mosaicShape = (int)GetParam(ANON_MOSAIC_SHAPE, clipTime).mInt32 - 1;
+		// Unlike the AE-style CPU side (u.pd.value, 1-based), the video
+		// segment suite delivers popup values 0-based.
+		int mosaicShape = (int)GetParam(ANON_MOSAIC_SHAPE, clipTime).mInt32;
 		if (mosaicShape < ANON_SHAPE_SQUARE || mosaicShape > ANON_SHAPE_HEXAGON)
 			mosaicShape = ANON_SHAPE_SQUARE;
 

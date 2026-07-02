@@ -3,7 +3,7 @@
 **
 ** AE_Effect_Global_OutFlags must match ANONYMIZER_OUT_FLAGS in Anonymizer.h
 ** (PF_OutFlag_NON_PARAM_VARY = 0x00000004).
-** AE_Effect_Version encodes PF_VERSION(1,2,0,PF_Stage_DEVELOP,0) = 589824.
+** AE_Effect_Version encodes PF_VERSION(1,3,0,PF_Stage_DEVELOP,0) = 622592.
 ** AE_Effect_Match_Name must match ANONYMIZER_MATCH_NAME in Anonymizer.h.
 */
 
@@ -54,7 +54,7 @@ resource 'PiPL' (16000) {
 			PF_PLUG_IN_SUBVERS
 		},
 		AE_Effect_Version {
-			589824 /* 1.2 */
+			622592 /* 1.3 */
 		},
 		AE_Effect_Info_Flags {
 			0

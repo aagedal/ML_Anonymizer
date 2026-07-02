@@ -43,6 +43,21 @@
 #define SEED_DFLT            0.0
 
 /*
+** Pixel-space parameters are specified at a 1080p reference and scaled by
+** the rendered frame height, so the anonymization strength is independent
+** of timeline resolution (and of proxy/preview downsampling, since a
+** half-resolution frame simply has half the height).
+*/
+#define ANON_REFERENCE_HEIGHT 1080.0f
+
+static inline float AnonResolutionScale(int inFrameHeight)
+{
+	if (inFrameHeight <= 0)
+		return 1.0f;
+	return (float)inFrameHeight / ANON_REFERENCE_HEIGHT;
+}
+
+/*
 ** Deterministic hash / seed helpers.
 */
 static inline uint32_t AnonIHash(uint32_t x)

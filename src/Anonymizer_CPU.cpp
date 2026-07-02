@@ -110,15 +110,10 @@ PF_Err Render(
 	if (w <= 0 || h <= 0)
 		return PF_Err_NONE;
 
-	// Pixel-space parameters are scaled by the render downsample factor so a
-	// half-resolution preview looks like the full-resolution render.
-	float ds = 1.0f;
-	if (in_data->downsample_x.den != 0 && in_data->downsample_x.num != 0)
-		ds = (float)in_data->downsample_x.num / (float)in_data->downsample_x.den;
-	if (ds > 1.0f)
-		ds = 1.0f / ds; // tolerate either fraction convention
-	if (ds <= 0.0f)
-		ds = 1.0f;
+	// Pixel-space parameters are relative to 1080p; scaling by the actual
+	// frame height keeps the anonymization strength constant across timeline
+	// resolutions and preview downsampling alike.
+	const float ds = AnonResolutionScale(h);
 
 	float amount = (float)params[ANON_DISTORT_AMOUNT]->u.fs_d.value * ds;
 	float scale = std::max((float)params[ANON_DISTORT_SCALE]->u.fs_d.value * ds, 2.0f);

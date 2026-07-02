@@ -193,11 +193,9 @@ public:
 		// ---- Parameters ----
 		const PrTime clipTime = inRenderParams->inClipTime;
 
-		float ds = inRenderParams->inDownsampleFactorX;
-		if (ds > 1.0f)
-			ds = 1.0f / ds; // tolerate either fraction convention
-		if (ds <= 0.0f)
-			ds = 1.0f;
+		// Pixel-space parameters are relative to 1080p; the render height
+		// already reflects any preview downsampling.
+		const float ds = AnonResolutionScale(height);
 
 		const float distortAmount = (float)GetParam(ANON_DISTORT_AMOUNT, clipTime).mFloat64 * ds;
 		const float distortScale = std::max((float)GetParam(ANON_DISTORT_SCALE, clipTime).mFloat64 * ds, 2.0f);
@@ -212,7 +210,7 @@ public:
 			frame = (int32_t)(clipTime / inRenderParams->inRenderTicksPerFrame);
 		const uint32_t seed = AnonComputeSeed(seedParam, jitter, frame);
 
-		const int blurRadiusInt = std::min((int)ceilf(blurRadius), 256);
+		const int blurRadiusInt = std::min((int)ceilf(blurRadius), 512);
 		const float blurSigma = std::max(blurRadius * 0.5f, 0.1f);
 
 		// Blackout short-circuits the whole stack: one pass, no temp buffers.

@@ -282,22 +282,9 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 		? (srcTile.top - dstTile.top)
 		: (dstTile.bottom - srcTile.bottom);
 
-	// Scale pixel-space parameters by the render scale (pixelTransform maps
-	// pixels to canonical 100%-scale units).
-	float ds = 1.0f;
-	{
-		FxMatrix44* xform = destinationImage.pixelTransform;
-		if (xform != nil)
-		{
-			FxPoint2D p0 = [xform transform2DPoint:(FxPoint2D){0.0, 0.0}];
-			FxPoint2D p1 = [xform transform2DPoint:(FxPoint2D){1.0, 0.0}];
-			double canonicalPerPixel = hypot(p1.x - p0.x, p1.y - p0.y);
-			if (canonicalPerPixel > 0.0)
-				ds = (float)(1.0 / canonicalPerPixel);
-		}
-		if (ds <= 0.0f || ds > 1.0f)
-			ds = 1.0f;
-	}
+	// Pixel-space parameters are relative to 1080p; the frame height already
+	// reflects any proxy/preview scaling.
+	const float ds = AnonResolutionScale(height);
 
 	id<MTLTexture> srcTexture = [srcImage metalTextureForDevice:device];
 	id<MTLTexture> dstTexture = [destinationImage metalTextureForDevice:device];
@@ -322,7 +309,7 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	params.m16f = 0;
 	params.mWidth = width;
 	params.mHeight = height;
-	params.mBlurRadius = (int)fminf(ceilf((float)state.blurRadius * ds), 256.0f);
+	params.mBlurRadius = (int)fminf(ceilf((float)state.blurRadius * ds), 512.0f);
 	params.mBlurDir = 0;
 	params.mDistortAmount = (float)state.distortAmount * ds;
 	params.mDistortScale = fmaxf((float)state.distortScale * ds, 2.0f);

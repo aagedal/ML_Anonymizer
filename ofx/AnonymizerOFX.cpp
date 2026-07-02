@@ -41,7 +41,7 @@
 	"stack with solid black."
 #define kPluginIdentifier ANON_OFX_PLUGIN_ID
 #define kPluginVersionMajor 1
-#define kPluginVersionMinor 2
+#define kPluginVersionMinor 3
 
 #define kSupportsTiles false
 #define kSupportsMultiResolution false
@@ -234,11 +234,10 @@ private:
 			OFX::throwSuiteStatusException(kOfxStatErrValue);
 		}
 
-		// Scale pixel-space params by the render scale so proxy/preview
-		// resolutions match the full-resolution result.
-		float ds = (float)p_Args.renderScale.x;
-		if (ds <= 0.0f || ds > 1.0f)
-			ds = 1.0f;
+		// Pixel-space parameters are relative to 1080p; the frame height
+		// already reflects any proxy/preview scaling.
+		const OfxRectI dstBounds = dst->getBounds();
+		const float ds = AnonResolutionScale(dstBounds.y2 - dstBounds.y1);
 
 		AnonRenderSettings settings = {};
 		settings.distortAmount = (float)m_DistortAmount->getValueAtTime(p_Args.time) * ds;

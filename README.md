@@ -25,13 +25,18 @@ attacker would have to jointly undo three lossy, keyed transforms.
 
 | Parameter | Default | Notes |
 |---|---|---|
-| Distortion Amount | 15 px | Maximum displacement of the warp field |
-| Distortion Scale | 10 px | Size of the noise features |
-| Blur Radius | 15 px | Gaussian radius (sigma = radius/2) |
-| Mosaic Block Size | 25 px | Pixelation block size |
+| Distortion Amount | 15 | Maximum displacement of the warp field |
+| Distortion Scale | 10 | Size of the noise features |
+| Blur Radius | 15 | Gaussian radius (sigma = radius/2) |
+| Mosaic Block Size | 25 | Pixelation block size |
 | Random Seed | 0 | Change for a different distortion pattern |
 | Temporal Jitter | On | New distortion pattern every frame |
 | Blackout | Off | Solid black instead of the distort/blur/mosaic stack (source alpha preserved) |
+
+Pixel-space parameters are specified **at a 1080p reference** and scale with
+the rendered frame height, so the anonymization strength is identical at
+1080p, 4K, or 8K — and proxy/preview renders match the full-resolution
+output automatically.
 
 Blackout is the zero-information option: nothing of the covered pixels
 survives, so use it (with an effect mask) when the region must be provably

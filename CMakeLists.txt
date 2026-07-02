@@ -28,7 +28,7 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/editions/${ANON_EDITION}.cmake")
 endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/editions/${ANON_EDITION}.cmake")
 
-set(ANON_VERSION "1.2.0")
+set(ANON_VERSION "1.3.0")
 
 # Branding values consumed by scripts/make_pkg.sh and the install scripts.
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/edition.sh"

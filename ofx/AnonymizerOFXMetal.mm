@@ -153,7 +153,7 @@ void RunMetalAnonymizer(void* p_CmdQ, int p_Width, int p_Height,
 	params.mHeight = p_Height;
 	params.mDistortAmount = p_Settings.distortAmount;
 	params.mDistortScale = p_Settings.distortScale;
-	params.mBlurRadius = std::min((int)ceilf(p_Settings.blurRadius), 256);
+	params.mBlurRadius = std::min((int)ceilf(p_Settings.blurRadius), 512);
 	params.mBlurSigma = std::max(p_Settings.blurRadius * 0.5f, 0.1f);
 	params.mMosaicSize = p_Settings.mosaicSize;
 	params.mSeed = p_Settings.seed;

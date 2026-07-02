@@ -25,9 +25,9 @@ attacker would have to jointly undo three lossy, keyed transforms.
 
 | Parameter | Default | Notes |
 |---|---|---|
-| Distortion Amount | 10 px | Maximum displacement of the warp field |
-| Distortion Scale | 4 px | Size of the noise features |
-| Blur Radius | 10 px | Gaussian radius (sigma = radius/2) |
+| Distortion Amount | 15 px | Maximum displacement of the warp field |
+| Distortion Scale | 10 px | Size of the noise features |
+| Blur Radius | 15 px | Gaussian radius (sigma = radius/2) |
 | Mosaic Block Size | 25 px | Pixelation block size |
 | Random Seed | 0 | Change for a different distortion pattern |
 | Temporal Jitter | On | New distortion pattern every frame |

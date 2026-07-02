@@ -291,9 +291,9 @@
 		<filter name="Multi-Layer Anonymizer" id="10013" factoryID="6" pluginUUID="211035B9-C3CF-42E6-B8CB-F9C28DC3B98A" pluginVersion="1" pluginName="Multi-Layer Anonymizer" pluginDynamicParams="0">
 			<timing in="0 1 1 0" out="1532928 153600 1 0" offset="0 1 1 0"/>
 			<baseFlags>8589934609</baseFlags>
-			<parameter name="Distortion Amount" id="1" flags="12901679120" default="10" value="10"/>
-			<parameter name="Distortion Scale" id="2" flags="12901679120" default="4" value="4"/>
-			<parameter name="Blur Radius" id="3" flags="12901679120" default="10" value="10"/>
+			<parameter name="Distortion Amount" id="1" flags="12901679120" default="15" value="15"/>
+			<parameter name="Distortion Scale" id="2" flags="12901679120" default="10" value="10"/>
+			<parameter name="Blur Radius" id="3" flags="12901679120" default="15" value="15"/>
 			<parameter name="Mosaic Block Size" id="4" flags="12901679120" default="25" value="25"/>
 			<parameter name="Random Seed" id="5" flags="12901679120" default="0" value="0"/>
 			<parameter name="Temporal Jitter" id="6" flags="12901679120" default="1" value="1"/>

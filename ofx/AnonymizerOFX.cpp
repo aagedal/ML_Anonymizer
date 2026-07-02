@@ -41,7 +41,7 @@
 	"stack with solid black."
 #define kPluginIdentifier ANON_OFX_PLUGIN_ID
 #define kPluginVersionMajor 1
-#define kPluginVersionMinor 1
+#define kPluginVersionMinor 2
 
 #define kSupportsTiles false
 #define kSupportsMultiResolution false

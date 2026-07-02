@@ -24,15 +24,15 @@
 */
 #define DISTORT_AMOUNT_MIN   0.0
 #define DISTORT_AMOUNT_MAX   200.0
-#define DISTORT_AMOUNT_DFLT  10.0
+#define DISTORT_AMOUNT_DFLT  15.0
 
 #define DISTORT_SCALE_MIN    4.0
 #define DISTORT_SCALE_MAX    400.0
-#define DISTORT_SCALE_DFLT   4.0
+#define DISTORT_SCALE_DFLT   10.0
 
 #define BLUR_RADIUS_MIN      0.0
 #define BLUR_RADIUS_MAX      100.0
-#define BLUR_RADIUS_DFLT     10.0
+#define BLUR_RADIUS_DFLT     15.0
 
 #define MOSAIC_SIZE_MIN      1.0
 #define MOSAIC_SIZE_MAX      256.0

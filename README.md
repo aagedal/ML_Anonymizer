@@ -219,6 +219,14 @@ anonymization for the same settings.
   from the information destroyed by blur + mosaic after displacement, not from
   seed secrecy.
 
+## License
+
+MIT — see [LICENSE](LICENSE). The vendored OpenFX SDK and Support library
+under `ofx/openfx/` are BSD-licensed by The Open Effects Association and
+Blackmagic Design (see `ofx/openfx/LICENSE`). The Adobe and Apple SDKs
+required to build are **not** included and are covered by their own license
+terms (see the SDKs section above).
+
 ## Extending to Windows
 
 The CPU path is already portable. For GPU on Windows, add CUDA/DirectX

@@ -259,6 +259,7 @@ if(EXISTS "${PS_SDK_PATH}/photoshopapi/photoshop/PIFilter.h")
 	add_library(AnonymizerPS MODULE
 		ps/AnonymizerPS.cpp
 		ps/AnonymizerPSUI.mm
+		ps/AnonymizerPSMetal.mm
 	)
 
 	target_include_directories(AnonymizerPS PRIVATE
@@ -271,7 +272,10 @@ if(EXISTS "${PS_SDK_PATH}/photoshopapi/photoshop/PIFilter.h")
 
 	target_compile_options(AnonymizerPS PRIVATE
 		"$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
-	target_link_libraries(AnonymizerPS PRIVATE "-framework Cocoa")
+	target_link_libraries(AnonymizerPS PRIVATE
+		"-framework Cocoa"
+		"-framework Metal"
+	)
 
 	target_compile_definitions(AnonymizerPS PRIVATE
 		ANONYMIZER_NAME="${ANON_EFFECT_NAME}"

@@ -57,4 +57,13 @@ typedef struct PSPreviewContext
 bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* preview);
 void DoAboutDialog(void);
 
+/*
+** Implemented in AnonymizerPSMetal.mm. Runs the pass pipeline in place on
+** the packed RGBA float buffer using the shared MSL kernels. Returns false
+** on any failure - the caller falls back to the identical CPU pipeline.
+*/
+bool RunMetalPasses(float* buf, int w, int h,
+	float amount, float scale, float blurRadius, float mosaicSize,
+	int mosaicShape, uint32_t seed);
+
 #endif

@@ -324,11 +324,9 @@ static void DoFilterImpl(void)
 		mosaicShape = ANON_SHAPE_SQUARE;
 
 	float* buf = (float*)malloc((size_t)w * h * 4 * sizeof(float));
-	float* scratch = (float*)malloc((size_t)w * h * 4 * sizeof(float));
-	if (buf == NULL || scratch == NULL)
+	float* scratch = NULL; /* allocated only if the CPU fallback runs */
+	if (buf == NULL)
 	{
-		free(buf);
-		free(scratch);
 		*gResult = memFullErr;
 		return;
 	}
@@ -392,8 +390,15 @@ static void DoFilterImpl(void)
 			for (int c = 0; c < colorPlanes; ++c)
 				buf[i * 4 + c] = 0.0f;
 	}
-	else
+	else if (!RunMetalPasses(buf, (int)w, (int)h,
+				amount, scale, blurRadius, mosaicSize, mosaicShape, 0u))
 	{
+		scratch = (float*)malloc((size_t)w * h * 4 * sizeof(float));
+		if (scratch == NULL)
+		{
+			*gResult = memFullErr;
+			goto cleanup;
+		}
 		AnonAlgo::RunLayeredPasses(buf, scratch, (int)w, (int)h,
 			amount, scale, blurRadius, mosaicSize, mosaicShape, 0u);
 	}

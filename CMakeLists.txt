@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 # VERSION is the single source of truth — bump here only.
-project(PremiereAnonymizer VERSION 1.4.7 LANGUAGES CXX OBJCXX)
+project(PremiereAnonymizer VERSION 1.5.0 LANGUAGES CXX OBJCXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -45,6 +45,7 @@ ID_PREMIERE=\"${ANON_ID_PREMIERE}\"
 ID_OFX=\"${ANON_ID_OFX}\"
 ID_FCP=\"${ANON_ID_FCP_APP}\"
 ID_FCP_SERVICE=\"${ANON_ID_FCP_SERVICE}\"
+ID_PS=\"${ANON_ID_PS}\"
 ")
 
 # SDK locations. Default to the vendored copies in sdk/; point these at your
@@ -246,4 +247,55 @@ if(EXISTS "${FXPLUG_FRAMEWORK_DIR}/FxPlug.framework")
 	add_custom_target(AnonymizerFxPlugBundle ALL DEPENDS "${FXPLUG_APP_STAMP}")
 else()
 	message(STATUS "FxPlug SDK not found - skipping the Final Cut Pro plugin")
+endif()
+
+# ---- Photoshop filter plugin ----
+# Requires the Photoshop Plug-In SDK (behind the Adobe Developer Console
+# login, like the Premiere SDK). CPU-only: the shared pass pipeline in
+# shared/AnonymizerAlgo.h is the same code the GPU parity tests verify.
+set(PS_SDK_PATH "${CMAKE_CURRENT_SOURCE_DIR}/sdk/photoshop/pluginsdk" CACHE PATH
+	"Photoshop plugin SDK root (the folder containing photoshopapi/)")
+if(EXISTS "${PS_SDK_PATH}/photoshopapi/photoshop/PIFilter.h")
+	add_library(AnonymizerPS MODULE
+		ps/AnonymizerPS.cpp
+		ps/AnonymizerPSUI.mm
+	)
+
+	target_include_directories(AnonymizerPS PRIVATE
+		ps
+		shared
+		"${PS_SDK_PATH}/photoshopapi/photoshop"
+		"${PS_SDK_PATH}/photoshopapi/pica_sp"
+		"${PS_SDK_PATH}/samplecode/common/includes"
+	)
+
+	target_compile_options(AnonymizerPS PRIVATE
+		"$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
+	target_link_libraries(AnonymizerPS PRIVATE "-framework Cocoa")
+
+	target_compile_definitions(AnonymizerPS PRIVATE
+		ANONYMIZER_NAME="${ANON_EFFECT_NAME}"
+		MAJOR_VERSION=${PROJECT_VERSION_MAJOR}
+		MINOR_VERSION=${PROJECT_VERSION_MINOR}
+		BUG_VERSION=${PROJECT_VERSION_PATCH}
+	)
+
+	set_target_properties(AnonymizerPS PROPERTIES
+		BUNDLE TRUE
+		BUNDLE_EXTENSION "plugin"
+		OUTPUT_NAME "${ANON_BUNDLE_BASE}PS"
+		MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/ps/Info-PS.plist.in"
+	)
+
+	# Photoshop 2024+ reads the PiPL from Resources/PiPLs.json (no Rez step).
+	configure_file(ps/PiPLs.json.in "${CMAKE_CURRENT_BINARY_DIR}/ps-PiPLs.json" @ONLY)
+	add_custom_command(TARGET AnonymizerPS POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:AnonymizerPS>/Resources"
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_BINARY_DIR}/ps-PiPLs.json" "$<TARGET_BUNDLE_CONTENT_DIR:AnonymizerPS>/Resources/PiPLs.json"
+		COMMAND /bin/sh -c "printf '8BFM8BIM' > '$<TARGET_BUNDLE_CONTENT_DIR:AnonymizerPS>/PkgInfo'"
+		COMMENT "Placing PiPLs.json and PkgInfo into the Photoshop bundle"
+		VERBATIM
+	)
+else()
+	message(STATUS "Photoshop SDK not found - skipping the Photoshop plugin")
 endif()

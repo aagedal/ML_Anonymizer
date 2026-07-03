@@ -28,8 +28,10 @@ BUILD="$(cd "$BUILD" && pwd)"
 PLUGIN="$BUILD/$BUNDLE_BASE.plugin"
 OFX_BUNDLE="$BUILD/$BUNDLE_BASE.ofx.bundle"
 FCP_APP="$BUILD/$APP_NAME.app"
+PS_PLUGIN="$BUILD/${BUNDLE_BASE}PS.plugin"
 INSTALL_LOCATION="/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore"
 OFX_INSTALL_LOCATION="/Library/OFX/Plugins"
+PS_INSTALL_LOCATION="/Library/Application Support/Adobe/Plug-Ins/CC"
 OUT="$BUILD/$PKG_BASENAME-$VERSION.pkg"
 
 if [ ! -d "$PLUGIN" ] || [ ! -d "$OFX_BUNDLE" ]; then
@@ -46,11 +48,15 @@ if [ -d "$FCP_APP" ]; then
 	mkdir -p "$PKGROOT/payload-fcp"
 	cp -R "$FCP_APP" "$PKGROOT/payload-fcp/"
 fi
+if [ -d "$PS_PLUGIN" ]; then
+	mkdir -p "$PKGROOT/payload-ps"
+	cp -R "$PS_PLUGIN" "$PKGROOT/payload-ps/"
+fi
 # Strip removable extended attributes (quarantine, Finder info). The
 # SIP-managed com.apple.provenance attribute survives this and shows up as
 # AppleDouble (._*) entries inside the package payload - that is harmless:
 # Installer restores it as an invisible xattr, no ._ files land on disk.
-xattr -rc "$PKGROOT/payload" "$PKGROOT/payload-ofx" "$PKGROOT/payload-fcp" 2>/dev/null || true
+xattr -rc "$PKGROOT/payload" "$PKGROOT/payload-ofx" "$PKGROOT/payload-fcp" "$PKGROOT/payload-ps" 2>/dev/null || true
 
 # Developer ID-sign the Premiere and OFX payload bundles (the FxPlug app is
 # already signed inside-out by assemble_fxplug.sh at build time). Hardened
@@ -65,6 +71,10 @@ if [ -n "$APP_SIGN_IDENTITY" ]; then
 		--sign "$APP_SIGN_IDENTITY" "$PKGROOT/payload/$BUNDLE_BASE.plugin"
 	codesign --force --options runtime --timestamp \
 		--sign "$APP_SIGN_IDENTITY" "$PKGROOT/payload-ofx/$BUNDLE_BASE.ofx.bundle"
+	if [ -d "$PKGROOT/payload-ps/${BUNDLE_BASE}PS.plugin" ]; then
+		codesign --force --options runtime --timestamp \
+			--sign "$APP_SIGN_IDENTITY" "$PKGROOT/payload-ps/${BUNDLE_BASE}PS.plugin"
+	fi
 else
 	echo "warning: no Developer ID Application identity - payload binaries keep their build signatures" >&2
 fi
@@ -126,6 +136,27 @@ PREINST
 chmod +x "$OFX_SCRIPTS/preinstall"
 build_component "$PKGROOT/payload-ofx" "$OFX_INSTALL_LOCATION" "$ID_OFX" "$PKGROOT/component-ofx.pkg" "$OFX_SCRIPTS"
 
+PS_CHOICE_OUTLINE=""
+PS_CHOICE=""
+PS_PKGREF=""
+if [ -d "$PKGROOT/payload-ps" ]; then
+	PS_SCRIPTS="$PKGROOT/scripts-ps"
+	mkdir -p "$PS_SCRIPTS"
+	cat > "$PS_SCRIPTS/preinstall" <<PREINST
+#!/bin/sh
+rm -rf "${PS_INSTALL_LOCATION}/${BUNDLE_BASE}PS.plugin"
+exit 0
+PREINST
+	chmod +x "$PS_SCRIPTS/preinstall"
+	build_component "$PKGROOT/payload-ps" "$PS_INSTALL_LOCATION" "$ID_PS" "$PKGROOT/component-ps.pkg" "$PS_SCRIPTS"
+	PS_CHOICE_OUTLINE='<line choice="photoshop"/>'
+	PS_CHOICE='<choice id="photoshop" title="Photoshop plugin"
+		description="Installs '$BUNDLE_BASE'PS.plugin into the shared Creative Cloud plugin folder (all Photoshop versions).">
+		<pkg-ref id="'$ID_PS'"/>
+	</choice>'
+	PS_PKGREF='<pkg-ref id="'$ID_PS'" version="'$VERSION'" onConclusion="none">component-ps.pkg</pkg-ref>'
+fi
+
 FCP_CHOICE_OUTLINE=""
 FCP_CHOICE=""
 FCP_PKGREF=""
@@ -172,6 +203,7 @@ cat > "$PKGROOT/distribution.xml" <<XML
 	<choices-outline>
 		<line choice="premiere"/>
 		<line choice="resolve"/>
+		$PS_CHOICE_OUTLINE
 		$FCP_CHOICE_OUTLINE
 	</choices-outline>
 	<choice id="premiere" title="Premiere Pro plugin"
@@ -182,9 +214,11 @@ cat > "$PKGROOT/distribution.xml" <<XML
 		description="Installs $BUNDLE_BASE.ofx.bundle into /Library/OFX/Plugins.">
 		<pkg-ref id="$ID_OFX"/>
 	</choice>
+	$PS_CHOICE
 	$FCP_CHOICE
 	<pkg-ref id="$ID_PREMIERE" version="$VERSION" onConclusion="none">component-premiere.pkg</pkg-ref>
 	<pkg-ref id="$ID_OFX" version="$VERSION" onConclusion="none">component-ofx.pkg</pkg-ref>
+	$PS_PKGREF
 	$FCP_PKGREF
 </installer-gui-script>
 XML

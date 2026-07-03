@@ -1,7 +1,8 @@
 # Multi-Layer Anonymizer
 
 A native, Metal-accelerated anonymization effect for **Adobe Premiere Pro**,
-**DaVinci Resolve**, and **Final Cut Pro / Motion** (macOS) that obscures
+**DaVinci Resolve**, **Final Cut Pro / Motion**, and **Adobe Photoshop**
+(macOS) that obscures
 image regions by stacking three independent obfuscation layers in a single
 effect:
 
@@ -61,6 +62,8 @@ detail. For moving subjects, keep it on.
 - Adobe **After Effects SDK** and **Premiere Pro SDK** (see below)
 - Apple **FxPlug 4 SDK** (optional — only needed for the Final Cut Pro
   plugin; the build skips it when the SDK is absent)
+- Adobe **Photoshop plugin SDK** (optional — only needed for the Photoshop
+  plugin; the build skips it when the SDK is absent)
 - Premiere Pro with the renderer set to *Mercury Playback Engine GPU
   Acceleration (Metal)* for the GPU path; *Software Only* uses the CPU path
   (identical output, verified to ~1e-7)
@@ -71,8 +74,8 @@ The `sdk/` folder contains vendored Adobe SDK headers for local development
 convenience. They are Adobe-licensed and **must not be redistributed** — the
 folder is git-ignored on purpose. For a clean setup, download the official
 SDKs from the [Adobe Developer Console](https://developer.adobe.com/console/servicesandapis)
-(Premiere Pro SDK, After Effects SDK; free with an Adobe ID) and point CMake
-at them:
+(Premiere Pro SDK, After Effects SDK, and optionally the Photoshop plugin
+SDK; free with an Adobe ID) and point CMake at them:
 
 ```sh
 cmake -B build \
@@ -82,7 +85,9 @@ cmake -B build \
 
 Both paths refer to the SDK root that contains `Examples/`. The Premiere SDK's
 `Examples/Projects/GPUVideoFilter/Utils` (for `PrGPUFilterModule.h`) is picked
-up automatically.
+up automatically. The Photoshop SDK is looked for at `sdk/photoshop/pluginsdk`
+(override with `-DPS_SDK_PATH=/path/to/pluginsdk`, the folder containing
+`photoshopapi/`).
 
 ## Build & install
 
@@ -143,6 +148,23 @@ effect to confine it. Notes:
 - FxPlug renders out-of-process: FCP hands the plugin IOSurface-backed Metal
   textures; a copy-in kernel and an output render pass bridge those to the
   same shared buffer kernels used by the other two hosts.
+
+### Photoshop
+
+With the Photoshop plugin SDK in place, the build also produces
+`build/AnonymizerPS.plugin` — a classic filter plugin sharing the exact same
+pass pipeline (CPU path). Install with:
+
+```sh
+./scripts/install_ps.sh   # copies to /Library/.../Adobe/Plug-Ins/CC (sudo)
+```
+
+Restart Photoshop; the filter appears under **Filter → Aagedal →
+Multi-Layer Anonymizer…** and works on RGB and Grayscale documents at 8, 16,
+and 32 bits per channel, respecting selections. Parameter values carry the
+same 1080p-reference semantics as the video hosts, scaled by the document's
+shorter dimension. The filter is not yet recordable with parameters in
+Actions (it reruns with its last-used values instead).
 
 ### Installer package
 

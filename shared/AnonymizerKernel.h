@@ -34,6 +34,8 @@ struct AnonParams
 	float blurSigma;
 	float mosaicSize;
 	uint seed;
+	float distortBiasDx;
+	float distortBiasDy;
 };
 
 inline float4 LoadPix(device const uchar* buf, int pitch, int x, int y, int is16f)
@@ -137,8 +139,8 @@ kernel void AnonDistort(
 		float invScale = 1.0f / max(p.distortScale, 2.0f);
 		float nx = VNoise(float(x) * invScale, float(y) * invScale, p.seed, 0u);
 		float ny = VNoise(float(x) * invScale, float(y) * invScale, p.seed, 1u);
-		float dx = (nx * 2.0f - 1.0f) * p.distortAmount;
-		float dy = (ny * 2.0f - 1.0f) * p.distortAmount;
+		float dx = ((nx * 2.0f - 1.0f) - p.distortBiasDx) * p.distortAmount;
+		float dy = ((ny * 2.0f - 1.0f) - p.distortBiasDy) * p.distortAmount;
 		c = SampleBilinear(src, p.srcPitch, p.width, p.height, p.is16f,
 			float2(float(x) + dx, float(y) + dy));
 	}

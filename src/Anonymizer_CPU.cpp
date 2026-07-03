@@ -100,6 +100,17 @@ PF_Err ParamsSetup(
 		"Square|Triangle|Hexagon",
 		ANON_MOSAIC_SHAPE);
 
+	// Read-only version display: single-item popup, cannot be changed by the user.
+#define ANON_STR_(x) #x
+#define ANON_STR(x) ANON_STR_(x)
+	AEFX_CLR_STRUCT(def);
+	PF_ADD_POPUP("Version",
+		1, 1,
+		"v" ANON_STR(MAJOR_VERSION) "." ANON_STR(MINOR_VERSION) "." ANON_STR(BUG_VERSION),
+		ANON_VERSION_DISPLAY);
+#undef ANON_STR
+#undef ANON_STR_
+
 	out_data->num_params = ANON_NUM_PARAMS;
 	return PF_Err_NONE;
 }
@@ -116,10 +127,10 @@ PF_Err Render(
 	if (w <= 0 || h <= 0)
 		return PF_Err_NONE;
 
-	// Pixel-space parameters are relative to 1080p; scaling by the actual
-	// frame height keeps the anonymization strength constant across timeline
-	// resolutions and preview downsampling alike.
-	const float ds = AnonResolutionScale(h);
+	// Pixel-space parameters are relative to 1080p; scaling by the shorter
+	// frame dimension keeps the anonymization strength constant across
+	// resolutions and orientations (portrait vs landscape timelines).
+	const float ds = AnonResolutionScale(w, h);
 
 	float amount = (float)params[ANON_DISTORT_AMOUNT]->u.fs_d.value * ds;
 	float scale = std::max((float)params[ANON_DISTORT_SCALE]->u.fs_d.value * ds, 2.0f);

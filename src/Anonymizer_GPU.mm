@@ -41,6 +41,8 @@ typedef struct
 	float mBlurSigma;
 	float mMosaicSize;
 	uint32_t mSeed;
+	float mDistortBiasDx;
+	float mDistortBiasDy;
 } AnonParamsHost;
 
 static prSuiteError CheckForMetalError(NSError* inError)
@@ -111,7 +113,7 @@ public:
 		// Precise math so cell/pixel selection matches the CPU path exactly;
 		// fast-math's approximate division flips mosaic cells at boundaries.
 		MTLCompileOptions* options = [[[MTLCompileOptions alloc] init] autorelease];
-		options.fastMathEnabled = NO;
+		options.mathMode = MTLMathModeSafe;
 		id<MTLLibrary> library = [[device newLibraryWithSource:source options:options error:&error] autorelease];
 		result = CheckForMetalError(error);
 		if (result != suiteError_NoError)
@@ -161,6 +163,12 @@ public:
 		mPPixSuite->GetRowBytes(inFrame, &srcRowBytes);
 		const int srcPitch = srcRowBytes / bytesPerPixel;
 
+		// DEBUG: log frame geometry so we can see what Premiere passes for
+		// matched vs mismatched clip/sequence aspect ratios. Check Console.app.
+		NSLog(@"[Anonymizer GPU] bounds=(%d,%d,%d,%d) w=%d h=%d srcPitch=%d",
+			bounds.left, bounds.top, bounds.right, bounds.bottom,
+			width, height, srcPitch);
+
 		void* srcFrameData = 0;
 		mGPUDeviceSuite->GetGPUPPixData(inFrame, &srcFrameData);
 		if (!srcFrameData)
@@ -188,9 +196,10 @@ public:
 		// ---- Parameters ----
 		const PrTime clipTime = inRenderParams->inClipTime;
 
-		// Pixel-space parameters are relative to 1080p; the render height
-		// already reflects any preview downsampling.
-		const float ds = AnonResolutionScale(height);
+		// Pixel-space parameters are relative to 1080p; the shorter frame
+		// dimension already reflects any preview downsampling and is
+		// orientation-invariant (portrait vs landscape timelines).
+		const float ds = AnonResolutionScale(width, height);
 
 		const float distortAmount = (float)GetParam(ANON_DISTORT_AMOUNT, clipTime).mFloat64 * ds;
 		const float distortScale = std::max((float)GetParam(ANON_DISTORT_SCALE, clipTime).mFloat64 * ds, 2.0f);
@@ -209,6 +218,30 @@ public:
 		if (inRenderParams->inRenderTicksPerFrame != 0)
 			frame = (int32_t)(clipTime / inRenderParams->inRenderTicksPerFrame);
 		const uint32_t seed = AnonComputeSeed(seedParam, jitter, frame);
+
+		// Compute the spatial mean of the noise displacement over the frame using a
+		// sparse grid. Subtracting this mean anchors the net image translation to
+		// zero for any seed, which is essential when temporal jitter changes the
+		// seed every frame (otherwise the whole image bounces). VNoise is C1-smooth
+		// so ~64 samples per axis give an accurate estimate with negligible overhead.
+		const float invScaleBias = 1.0f / std::max(distortScale, 2.0f);
+		const int kBiasStep = std::max(1, std::max(width, height) / 64);
+		float sumBiasDx = 0.0f, sumBiasDy = 0.0f;
+		int biasSamples = 0;
+		for (int sy = kBiasStep / 2; sy < height; sy += kBiasStep) {
+			for (int sx = kBiasStep / 2; sx < width; sx += kBiasStep) {
+				sumBiasDx += AnonAlgo::VNoise((float)sx * invScaleBias, (float)sy * invScaleBias, seed, 0u);
+				sumBiasDy += AnonAlgo::VNoise((float)sx * invScaleBias, (float)sy * invScaleBias, seed, 1u);
+				++biasSamples;
+			}
+		}
+		const float distortBiasDx = biasSamples > 0 ? (sumBiasDx / (float)biasSamples) * 2.0f - 1.0f : 0.0f;
+		const float distortBiasDy = biasSamples > 0 ? (sumBiasDy / (float)biasSamples) * 2.0f - 1.0f : 0.0f;
+
+		NSLog(@"[Anonymizer GPU] frame=%d seed=%u ds=%.3f distortAmount=%.2f distortScale=%.2f biasDx=%.4f biasDy=%.4f samples=%d",
+			frame, seed, (float)AnonResolutionScale(width, height),
+			(float)distortAmount, (float)distortScale,
+			distortBiasDx, distortBiasDy, biasSamples);
 
 		const int blurRadiusInt = std::min((int)ceilf(blurRadius), 512);
 		const float blurSigma = std::max(blurRadius * 0.5f, 0.1f);
@@ -273,6 +306,8 @@ public:
 		params.mBlurSigma = blurSigma;
 		params.mMosaicSize = mosaicSize;
 		params.mSeed = seed;
+		params.mDistortBiasDx = distortBiasDx;
+		params.mDistortBiasDy = distortBiasDy;
 
 		// Layer 1: distortion, input frame -> tmpA
 		params.mSrcPitch = srcPitch;

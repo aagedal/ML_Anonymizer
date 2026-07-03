@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
-project(PremiereAnonymizer LANGUAGES CXX OBJCXX)
+# VERSION is the single source of truth — bump here only.
+project(PremiereAnonymizer VERSION 1.4.7 LANGUAGES CXX OBJCXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -14,7 +15,7 @@ if(NOT CMAKE_OSX_ARCHITECTURES)
 	set(CMAKE_OSX_ARCHITECTURES "arm64")
 endif()
 if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
-	set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0")
+	set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0")
 endif()
 
 # ---- Edition branding ----
@@ -29,7 +30,7 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/editions/${ANON_EDITION}.cmake")
 endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/editions/${ANON_EDITION}.cmake")
 
-set(ANON_VERSION "1.4.2")
+set(ANON_VERSION "${PROJECT_VERSION}")
 
 # Branding values consumed by scripts/make_pkg.sh and the install scripts.
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/edition.sh"
@@ -93,6 +94,9 @@ target_compile_definitions(Anonymizer PRIVATE
 	ANONYMIZER_NAME="${ANON_EFFECT_NAME}"
 	ANONYMIZER_MATCH_NAME="${ANON_MATCH_NAME}"
 	ANONYMIZER_CATEGORY="${ANON_CATEGORY}"
+	MAJOR_VERSION=${PROJECT_VERSION_MAJOR}
+	MINOR_VERSION=${PROJECT_VERSION_MINOR}
+	BUG_VERSION=${PROJECT_VERSION_PATCH}
 )
 
 set_target_properties(Anonymizer PROPERTIES

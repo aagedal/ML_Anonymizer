@@ -44,9 +44,9 @@
 
 /*
 ** Pixel-space parameters are specified at a 1080p reference and scaled by
-** the rendered frame height, so the anonymization strength is independent
-** of timeline resolution (and of proxy/preview downsampling, since a
-** half-resolution frame simply has half the height).
+** the shorter frame dimension, so the anonymization strength is independent
+** of both timeline resolution and orientation. Proxy/preview downsampling is
+** handled automatically: a half-resolution frame has half the short dimension.
 */
 #define ANON_REFERENCE_HEIGHT 1080.0f
 
@@ -60,11 +60,12 @@ enum
 	ANON_SHAPE_HEXAGON = 2,
 };
 
-static inline float AnonResolutionScale(int inFrameHeight)
+static inline float AnonResolutionScale(int inFrameWidth, int inFrameHeight)
 {
-	if (inFrameHeight <= 0)
+	int shortSide = inFrameWidth < inFrameHeight ? inFrameWidth : inFrameHeight;
+	if (shortSide <= 0)
 		return 1.0f;
-	return (float)inFrameHeight / ANON_REFERENCE_HEIGHT;
+	return (float)shortSide / ANON_REFERENCE_HEIGHT;
 }
 
 /*
@@ -158,6 +159,24 @@ inline void DistortPass(const float* src, float* dst, int w, int h,
 		return;
 	}
 	float invScale = 1.0f / std::max(scale, 2.0f);
+	// Value noise has a non-zero spatial mean over any finite domain, causing
+	// a net DC translation of the whole image. The mean changes with each seed,
+	// so temporal jitter (different seed per frame) makes the whole image bounce.
+	// Fix: estimate the mean over a sparse uniform grid and subtract it so the
+	// net displacement is exactly zero regardless of seed or frame size.
+	// VNoise is C1-smooth, so ~64 samples per axis give an accurate estimate.
+	const int kStep = std::max(1, std::max(w, h) / 64);
+	float sumDx = 0.0f, sumDy = 0.0f;
+	int count = 0;
+	for (int sy = kStep / 2; sy < h; sy += kStep) {
+		for (int sx = kStep / 2; sx < w; sx += kStep) {
+			sumDx += VNoise((float)sx * invScale, (float)sy * invScale, seed, 0u);
+			sumDy += VNoise((float)sx * invScale, (float)sy * invScale, seed, 1u);
+			++count;
+		}
+	}
+	float biasDx = count > 0 ? (sumDx / (float)count) * 2.0f - 1.0f : 0.0f;
+	float biasDy = count > 0 ? (sumDy / (float)count) * 2.0f - 1.0f : 0.0f;
 	for (int y = 0; y < h; ++y)
 	{
 		float* out = dst + (size_t)y * w * 4;
@@ -165,8 +184,8 @@ inline void DistortPass(const float* src, float* dst, int w, int h,
 		{
 			float nx = VNoise((float)x * invScale, (float)y * invScale, seed, 0u);
 			float ny = VNoise((float)x * invScale, (float)y * invScale, seed, 1u);
-			float dx = (nx * 2.0f - 1.0f) * amount;
-			float dy = (ny * 2.0f - 1.0f) * amount;
+			float dx = ((nx * 2.0f - 1.0f) - biasDx) * amount;
+			float dy = ((ny * 2.0f - 1.0f) - biasDy) * amount;
 			SampleBilinear(src, w, h, (float)x + dx, (float)y + dy, out);
 		}
 	}

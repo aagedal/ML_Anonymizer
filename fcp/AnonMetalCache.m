@@ -34,7 +34,7 @@
 	NSError* error = nil;
 	// Precise math so cell/pixel selection matches the other hosts exactly.
 	MTLCompileOptions* options = [[MTLCompileOptions alloc] init];
-	options.fastMathEnabled = NO;
+	options.mathMode = MTLMathModeSafe;
 	_library = [device newLibraryWithSource:source options:options error:&error];
 	if (_library == nil)
 	{

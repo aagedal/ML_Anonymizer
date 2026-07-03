@@ -237,10 +237,11 @@ private:
 			OFX::throwSuiteStatusException(kOfxStatErrValue);
 		}
 
-		// Pixel-space parameters are relative to 1080p; the frame height
-		// already reflects any proxy/preview scaling.
+		// Pixel-space parameters are relative to 1080p; the shorter frame
+		// dimension reflects proxy/preview scaling and is orientation-invariant
+		// (portrait vs landscape timelines).
 		const OfxRectI dstBounds = dst->getBounds();
-		const float ds = AnonResolutionScale(dstBounds.y2 - dstBounds.y1);
+		const float ds = AnonResolutionScale(dstBounds.x2 - dstBounds.x1, dstBounds.y2 - dstBounds.y1);
 
 		AnonRenderSettings settings = {};
 		settings.distortAmount = (float)m_DistortAmount->getValueAtTime(p_Args.time) * ds;

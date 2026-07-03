@@ -293,9 +293,10 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 		? (srcTile.top - dstTile.top)
 		: (dstTile.bottom - srcTile.bottom);
 
-	// Pixel-space parameters are relative to 1080p; the frame height already
-	// reflects any proxy/preview scaling.
-	const float ds = AnonResolutionScale(height);
+	// Pixel-space parameters are relative to 1080p; the shorter frame
+	// dimension reflects proxy/preview scaling and is orientation-invariant
+	// (portrait vs landscape timelines).
+	const float ds = AnonResolutionScale(width, height);
 
 	id<MTLTexture> srcTexture = [srcImage metalTextureForDevice:device];
 	id<MTLTexture> dstTexture = [destinationImage metalTextureForDevice:device];

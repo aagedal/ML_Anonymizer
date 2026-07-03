@@ -51,6 +51,9 @@ fi
 if [ -d "$PS_PLUGIN" ]; then
 	mkdir -p "$PKGROOT/payload-ps"
 	cp -R "$PS_PLUGIN" "$PKGROOT/payload-ps/"
+	if [ -f "$BUILD/${BUNDLE_BASE}Action.atn" ]; then
+		cp "$BUILD/${BUNDLE_BASE}Action.atn" "$PKGROOT/payload-ps/"
+	fi
 fi
 # Strip removable extended attributes (quarantine, Finder info). The
 # SIP-managed com.apple.provenance attribute survives this and shows up as
@@ -148,10 +151,21 @@ rm -rf "${PS_INSTALL_LOCATION}/${BUNDLE_BASE}PS.plugin"
 exit 0
 PREINST
 	chmod +x "$PS_SCRIPTS/preinstall"
+	# Copy the bundled action into every installed Photoshop's Presets/Actions
+	# folder so it shows in the Actions panel flyout menu for one-click load.
+	cat > "$PS_SCRIPTS/postinstall" <<POSTINSTALL
+#!/bin/sh
+for _presets in "/Applications/Adobe Photoshop "*/Presets/Actions; do
+	[ -d "\$_presets" ] || continue
+	cp -f "${PS_INSTALL_LOCATION}/${BUNDLE_BASE}Action.atn" "\$_presets/" 2>/dev/null || true
+done
+exit 0
+POSTINSTALL
+	chmod +x "$PS_SCRIPTS/postinstall"
 	build_component "$PKGROOT/payload-ps" "$PS_INSTALL_LOCATION" "$ID_PS" "$PKGROOT/component-ps.pkg" "$PS_SCRIPTS"
 	PS_CHOICE_OUTLINE='<line choice="photoshop"/>'
 	PS_CHOICE='<choice id="photoshop" title="Photoshop plugin"
-		description="Installs '$BUNDLE_BASE'PS.plugin into the shared Creative Cloud plugin folder (all Photoshop versions).">
+		description="Installs '$BUNDLE_BASE'PS.plugin into the shared Creative Cloud plugin folder (all Photoshop versions), plus a ready-made action (mask-based selective anonymization) offered in the Actions panel menu.">
 		<pkg-ref id="'$ID_PS'"/>
 	</choice>'
 	PS_PKGREF='<pkg-ref id="'$ID_PS'" version="'$VERSION'" onConclusion="none">component-ps.pkg</pkg-ref>'

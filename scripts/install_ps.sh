@@ -20,4 +20,15 @@ echo "Installing to $DEST (may prompt for your password)"
 sudo mkdir -p "$DEST"
 sudo rm -rf "$DEST/${BUNDLE_BASE}PS.plugin"
 sudo cp -R "$PLUGIN" "$DEST/"
+
+# The bundled action: keep a canonical copy next to the plugin and offer it
+# in every installed Photoshop's Actions panel flyout menu.
+ACTION="$BUILD/${BUNDLE_BASE}Action.atn"
+if [ -f "$ACTION" ]; then
+	sudo cp -f "$ACTION" "$DEST/"
+	for _presets in "/Applications/Adobe Photoshop "*/Presets/Actions; do
+		[ -d "$_presets" ] || continue
+		sudo cp -f "$ACTION" "$_presets/"
+	done
+fi
 echo "Installed. Restart Photoshop."

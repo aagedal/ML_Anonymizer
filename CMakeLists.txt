@@ -291,6 +291,29 @@ if(EXISTS "${PS_SDK_PATH}/photoshopapi/photoshop/PIFilter.h")
 		MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/ps/Info-PS.plist.in"
 	)
 
+	# Rebrand the bundled Photoshop action for this edition. The source action
+	# plays the filter by menu name, so the replacement must match the PiPL
+	# Name ("<effect name>...").
+	if(NOT DEFINED ANON_PS_ACTION_NAME)
+		set(ANON_PS_ACTION_NAME "Anonymizer Action")
+	endif()
+	set(PS_ACTION_OUT "${CMAKE_CURRENT_BINARY_DIR}/${ANON_BUNDLE_BASE}Action.atn")
+	add_custom_command(
+		OUTPUT "${PS_ACTION_OUT}"
+		COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/make_ps_action.py"
+			"${CMAKE_CURRENT_SOURCE_DIR}/ps/actions/AagedalAnonymizer.atn"
+			"${PS_ACTION_OUT}"
+			"${ANON_CATEGORY}"
+			"${ANON_PS_ACTION_NAME}"
+			"${ANON_EFFECT_NAME}..."
+		DEPENDS
+			"${CMAKE_CURRENT_SOURCE_DIR}/ps/actions/AagedalAnonymizer.atn"
+			"${CMAKE_CURRENT_SOURCE_DIR}/scripts/make_ps_action.py"
+		COMMENT "Rebranding Photoshop action for ${ANON_EDITION}"
+		VERBATIM
+	)
+	add_custom_target(AnonymizerPSAction ALL DEPENDS "${PS_ACTION_OUT}")
+
 	# Photoshop 2024+ reads the PiPL from Resources/PiPLs.json (no Rez step).
 	configure_file(ps/PiPLs.json.in "${CMAKE_CURRENT_BINARY_DIR}/ps-PiPLs.json" @ONLY)
 	add_custom_command(TARGET AnonymizerPS POST_BUILD

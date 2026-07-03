@@ -71,34 +71,31 @@ With these values, all three kernels are pixel-exact copies (`src[y*pitch+x] →
 Shift still present, image position unchanged from the all-enabled case.
 → None of our three processing passes cause the shift.
 
-### Root Cause
+### Root Cause (revised 2026-07-03, fix implemented — awaiting user verification)
 
-**The shift is caused by Premiere Pro's compositing pipeline, not by our effect.**
+The earlier conclusion ("Premiere compositing bug, nothing we can do") was wrong — the
+"even a no-op copy shifts" observation pointed at frame *metadata*, not pixel processing.
 
-When any GPU effect is applied to an AR-mismatched clip, Premiere uses a different compositing
-transform for the clip than it uses without an effect. Since a no-op effect (pixel-exact copy)
-also causes the shift, there is nothing in our pixel processing that can fix or prevent it.
-The shift happens in Premiere's step after `Render()` returns.
+Our `Render()` replaced the host-provided `*outFrame` with a frame allocated via
+`GPUDeviceSuite::CreateGPUPPix(width, height, …)`. That call takes no bounds origin, so the
+replacement frame's bounds always start at (0,0). For effects (unlike transitions) Premiere
+delivers `*outFrame` pre-filled with the source pixels, and its bounds carry the clip's
+placement inside the sequence frame. For AR-mismatched clips that origin is non-zero
+(e.g. a 16:9 clip centered in a 9:16 sequence), and discarding it shifts the clip by exactly
+the lost offset — pixel content is irrelevant, which is why the no-op copy still shifted, and
+why matched-AR clips (origin 0,0) were unaffected.
 
-This appears to be a Premiere bug / limitation in the Mercury GPU Acceleration compositing path
-for AR-mismatched clips with GPU effects applied.
+**Fix:** operate in place on `*outFrame`, the pattern Adobe's own filter samples
+(SDK_ProcAmp_GPU, Vignette_GPU) use — `PrSDKGPUFilter.h` explicitly allows "or operate in
+place". The frame keeps its bounds/placement metadata. No aliasing hazard: the multi-pass
+chain reads the frame only in the first pass (into tmpA) and writes it only in the last, and
+the blackout kernel touches each pixel exactly once.
 
-### What We Still Don't Know
+**To verify:** rebuild + reinstall, apply the effect to a 16:9 clip in a 9:16 sequence (and
+vice versa) — the image should no longer move. The `[Anonymizer GPU]` NSLog now also prints
+`bounds=` for the frame; for a mismatched clip a non-zero left/top confirms the diagnosis.
 
-The NSLogs shown in the previous Console.app session were captured for matched-AR scenarios.
-We have not confirmed what frame dimensions Premiere passes to the GPU effect for mismatched-AR clips.
-This matters because:
-
-- **If Premiere passes sequence dimensions (e.g., 1080×1920 for the portrait sequence):** the compositing
-  transform is applied after our effect's output, and we have no way to compensate.
-- **If Premiere passes clip dimensions (e.g., 1920×1080 for the landscape clip):** Premiere scales/positions
-  our output when compositing, and a pre-shift in our output might be able to compensate — though we'd
-  need to know the expected placement from within the GPU filter.
-
-**To get this data:** apply the no-op params (Amount=0, Blur=0, Mosaic=1) to a mismatched-AR clip in Premiere,
-then read Console.app for `[Anonymizer GPU]` entries. Compare `w=` and `h=` to the sequence dimensions.
-
-### Workaround for Users
+### Workaround for Users (obsolete if the fix verifies)
 
 **Nest the clip:**
 1. Create a sequence matching the clip's native AR (e.g., 16:9 for a 16:9 clip).
@@ -112,7 +109,7 @@ sequence without the GPU-effect compositing bug.
 
 ## Remaining Cleanup
 
-- [ ] Remove the temporary `NSLog` debug statements from `src/Anonymizer_GPU.mm` (lines 168–170 and 241–244)
+- [ ] Remove the two temporary `NSLog` debug statements from `src/Anonymizer_GPU.mm` once the AR-shift fix is user-verified (search for `[Anonymizer GPU]`)
 - [ ] Rebuild and package OSS edition with all session fixes
 - [ ] Sign and notarize the branded edition package
 - [ ] Investigate FCP stuttery mask movement (low priority, not yet started)

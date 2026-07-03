@@ -140,17 +140,26 @@ public:
 		csSDK_size_t inFrameCount,
 		PPixHand* outFrame)
 	{
-		if (!inFrames || inFrameCount < 1 || !inFrames[0] || !outFrame)
+		if (!outFrame || !*outFrame)
 			return suiteError_Fail;
 
-		PPixHand inFrame = inFrames[0];
+		// For effects (unlike transitions) the host delivers *outFrame
+		// pre-filled with the source pixels, and the SDK allows rendering in
+		// place (see SDK_ProcAmp_GPU / Vignette_GPU). Operating on *outFrame
+		// directly preserves the frame's bounds and placement metadata.
+		// Replacing it with a CreateGPUPPix frame resets the bounds origin to
+		// (0,0), which shifted clips whose aspect ratio doesn't match the
+		// sequence. Reads and writes never alias: the multi-pass chain reads
+		// the frame only in the first pass and writes it only in the last,
+		// and blackout touches each pixel exactly once.
+		PPixHand ioPPix = *outFrame;
 
 		// ---- Frame geometry ----
 		PrPixelFormat pixelFormat = PrPixelFormat_Invalid;
-		mPPixSuite->GetPixelFormat(inFrame, &pixelFormat);
+		mPPixSuite->GetPixelFormat(ioPPix, &pixelFormat);
 
 		prRect bounds = {};
-		mPPixSuite->GetBounds(inFrame, &bounds);
+		mPPixSuite->GetBounds(ioPPix, &bounds);
 		const int width = bounds.right - bounds.left;
 		const int height = bounds.bottom - bounds.top;
 		if (width <= 0 || height <= 0)
@@ -159,39 +168,23 @@ public:
 		const int bytesPerPixel = GetGPUBytesPerPixel(pixelFormat);
 		const int is16f = pixelFormat != PrPixelFormat_GPU_BGRA_4444_32f;
 
-		csSDK_int32 srcRowBytes = 0;
-		mPPixSuite->GetRowBytes(inFrame, &srcRowBytes);
-		const int srcPitch = srcRowBytes / bytesPerPixel;
+		csSDK_int32 rowBytes = 0;
+		mPPixSuite->GetRowBytes(ioPPix, &rowBytes);
+		const int srcPitch = rowBytes / bytesPerPixel;
+		const int dstPitch = srcPitch;
 
 		// DEBUG: log frame geometry so we can see what Premiere passes for
 		// matched vs mismatched clip/sequence aspect ratios. Check Console.app.
-		NSLog(@"[Anonymizer GPU] bounds=(%d,%d,%d,%d) w=%d h=%d srcPitch=%d",
+		NSLog(@"[Anonymizer GPU] bounds=(%d,%d,%d,%d) w=%d h=%d pitch=%d",
 			bounds.left, bounds.top, bounds.right, bounds.bottom,
 			width, height, srcPitch);
 
-		void* srcFrameData = 0;
-		mGPUDeviceSuite->GetGPUPPixData(inFrame, &srcFrameData);
-		if (!srcFrameData)
+		void* frameData = 0;
+		mGPUDeviceSuite->GetGPUPPixData(ioPPix, &frameData);
+		if (!frameData)
 			return suiteError_Fail;
-
-		// ---- Allocate the output frame ----
-		csSDK_uint32 parNumerator = 1;
-		csSDK_uint32 parDenominator = 1;
-		mPPixSuite->GetPixelAspectRatio(inFrame, &parNumerator, &parDenominator);
-		prFieldType fieldType = prFieldsNone;
-		mPPix2Suite->GetFieldOrder(inFrame, &fieldType);
-
-		prSuiteError err = mGPUDeviceSuite->CreateGPUPPix(
-			mDeviceIndex, pixelFormat, width, height,
-			parNumerator, parDenominator, fieldType, outFrame);
-		if (PrSuiteErrorFailed(err) || !*outFrame)
-			return suiteError_Fail;
-
-		void* dstFrameData = 0;
-		mGPUDeviceSuite->GetGPUPPixData(*outFrame, &dstFrameData);
-		csSDK_int32 dstRowBytes = 0;
-		mPPixSuite->GetRowBytes(*outFrame, &dstRowBytes);
-		const int dstPitch = dstRowBytes / bytesPerPixel;
+		void* srcFrameData = frameData;
+		void* dstFrameData = frameData;
 
 		// ---- Parameters ----
 		const PrTime clipTime = inRenderParams->inClipTime;

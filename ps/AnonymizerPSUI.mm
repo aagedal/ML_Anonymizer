@@ -69,12 +69,28 @@
 	if (v > slider.maxValue) v = slider.maxValue;
 	return v;
 }
+- (void)setValue:(double)v
+{
+	slider.doubleValue = v;
+	[field setStringValue:[NSString stringWithFormat:@"%.1f", v]];
+}
 @end
 
 @implementation AnonDialogController
 
 - (void)controlChanged:(id)sender
 {
+	[self refreshPreview];
+}
+
+- (void)resetPressed:(id)sender
+{
+	[amount setValue:DISTORT_AMOUNT_DFLT];
+	[scale setValue:DISTORT_SCALE_DFLT];
+	[blur setValue:BLUR_RADIUS_DFLT];
+	[mosaic setValue:MOSAIC_SIZE_DFLT];
+	[shape selectItemAtIndex:ANON_SHAPE_SQUARE];
+	blackout.state = NSControlStateValueOff;
 	[self refreshPreview];
 }
 
@@ -252,6 +268,11 @@ bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* previewIn)
 		controller->blackout.state = ioParams->blackout ? NSControlStateValueOn
 														: NSControlStateValueOff;
 		[content addSubview:controller->blackout];
+
+		NSButton* reset = [NSButton buttonWithTitle:@"Reset to Defaults"
+			target:controller action:@selector(resetPressed:)];
+		reset.frame = NSMakeRect(16, 14, 140, 30);
+		[content addSubview:reset];
 
 		NSButton* cancel = [NSButton buttonWithTitle:@"Cancel" target:nil action:nil];
 		cancel.frame = NSMakeRect(256, 14, 88, 30);

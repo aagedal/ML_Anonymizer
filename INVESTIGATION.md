@@ -110,6 +110,7 @@ sequence without the GPU-effect compositing bug.
 ## Remaining Cleanup
 
 - [x] Remove the two temporary `NSLog` debug statements from `src/Anonymizer_GPU.mm` (done after the AR-shift fix was verified)
-- [ ] Rebuild and package OSS edition with all session fixes
-- [ ] Sign and notarize the branded edition package
-- [ ] Investigate FCP stuttery mask movement (low priority, not yet started)
+- [x] Rebuild and package OSS edition with all session fixes (1.4.7, notarized + stapled, installer user-tested 2026-07-03)
+- [x] Sign and notarize the branded edition package (1.4.7, notarized + stapled, installer user-tested 2026-07-03)
+- [x] FCP stuttery mask movement: reproduced with Apple's own native FCP effects (2026-07-03),
+      so it is Final Cut Pro behavior, not a bug in this plugin. No action.

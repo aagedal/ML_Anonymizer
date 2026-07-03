@@ -32,6 +32,10 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/editions/${ANON_EDITION}.cmake")
 
 set(ANON_VERSION "${PROJECT_VERSION}")
 
+if(NOT DEFINED ANON_PS_ACTION_NAME)
+	set(ANON_PS_ACTION_NAME "Anonymizer Action")
+endif()
+
 # Branding values consumed by scripts/make_pkg.sh and the install scripts.
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/edition.sh"
 "EDITION=\"${ANON_EDITION}\"
@@ -46,6 +50,8 @@ ID_OFX=\"${ANON_ID_OFX}\"
 ID_FCP=\"${ANON_ID_FCP_APP}\"
 ID_FCP_SERVICE=\"${ANON_ID_FCP_SERVICE}\"
 ID_PS=\"${ANON_ID_PS}\"
+CATEGORY=\"${ANON_CATEGORY}\"
+PS_ACTION_NAME=\"${ANON_PS_ACTION_NAME}\"
 ")
 
 # SDK locations. Default to the vendored copies in sdk/; point these at your

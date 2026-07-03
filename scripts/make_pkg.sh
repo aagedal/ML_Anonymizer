@@ -212,12 +212,57 @@ POSTINSTALL
 	FCP_PKGREF='<pkg-ref id="'$ID_FCP'" version="'$VERSION'" onConclusion="none">component-fcp.pkg</pkg-ref>'
 fi
 
+# Post-install notes shown on the installer's final pane.
+RESOURCES="$PKGROOT/resources"
+mkdir -p "$RESOURCES"
+FCP_NOTE=""
+if [ -d "$FCP_APP" ]; then
+	FCP_NOTE="<dt>Final Cut Pro</dt>
+	<dd>The <em>$APP_NAME</em> app opened once to register the effect and install
+	the Motion template. Find the effect in the Effects browser under
+	<strong>$CATEGORY</strong>.</dd>"
+fi
+PS_NOTE=""
+if [ -d "$PKGROOT/payload-ps" ]; then
+	PS_NOTE="<dt>Photoshop</dt>
+	<dd>Run the filter from <strong>Filter &gt; $CATEGORY &gt; $EFFECT_NAME&#8230;</strong>.
+	The bundled action set <strong>&#8220;$CATEGORY&#8221;</strong> (with
+	<em>$PS_ACTION_NAME</em>: paint-to-anonymize on a masked smart object) was
+	imported into the Actions panel automatically &#8212; if Photoshop was open
+	during installation, it may ask you to confirm. To import it again later,
+	double-click <code>${BUNDLE_BASE}Action.atn</code> in
+	<code>$PS_INSTALL_LOCATION</code>.</dd>"
+fi
+cat > "$RESOURCES/conclusion.html" <<HTML
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+body { font: 13px -apple-system, "Helvetica Neue", sans-serif; margin: 16px; }
+dt { font-weight: 600; margin-top: 10px; }
+dd { margin: 2px 0 0 0; }
+code { font-size: 11px; }
+</style></head><body>
+<p><strong>$PKG_TITLE $VERSION</strong> is installed. Restart any application
+that was running during installation, then:</p>
+<dl>
+<dt>Premiere Pro</dt>
+<dd>Effects panel &gt; Video Effects &gt; <strong>$CATEGORY</strong> &gt;
+$EFFECT_NAME. Use effect masks to limit it to a face or plate.</dd>
+<dt>DaVinci Resolve</dt>
+<dd>OpenFX &gt; Filters &gt; <strong>$CATEGORY</strong>.</dd>
+$PS_NOTE
+$FCP_NOTE
+</dl>
+</body></html>
+HTML
+
 # Distribution package: proper title, per-host selectable choices.
 cat > "$PKGROOT/distribution.xml" <<XML
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
 	<title>$PKG_TITLE</title>
 	<options customize="always" require-scripts="false" hostArchitectures="arm64,x86_64"/>
+	<conclusion file="conclusion.html"/>
 	<volume-check>
 		<allowed-os-versions>
 			<os-version min="15.0"/>
@@ -254,6 +299,7 @@ if [ -n "$SIGN_IDENTITY" ]; then
 	productbuild \
 		--distribution "$PKGROOT/distribution.xml" \
 		--package-path "$PKGROOT" \
+		--resources "$RESOURCES" \
 		--sign "$SIGN_IDENTITY" \
 		"$OUT"
 else
@@ -261,6 +307,7 @@ else
 	productbuild \
 		--distribution "$PKGROOT/distribution.xml" \
 		--package-path "$PKGROOT" \
+		--resources "$RESOURCES" \
 		"$OUT"
 fi
 

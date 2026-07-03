@@ -6,9 +6,18 @@
 # Names and identifiers come from <build_dir>/edition.sh, written by CMake
 # according to -DANON_EDITION (see editions/*.cmake).
 #
-# Optional signing for distribution outside your own machine:
-#   SIGN_IDENTITY="Developer ID Installer: Your Name (TEAMID)" ./scripts/make_pkg.sh
-# (unsigned packages work locally but are flagged by Gatekeeper when downloaded)
+# Signing / notarization for distribution outside your own machine:
+#   - Payload binaries are signed with the first "Developer ID Application"
+#     identity in the keychain (override: APP_SIGN_IDENTITY), hardened
+#     runtime + timestamp, as notarization requires.
+#   - The pkg is signed with the first "Developer ID Installer" identity
+#     (override: SIGN_IDENTITY). Without one, the pkg is unsigned and
+#     Gatekeeper flags it when downloaded.
+#   - Set NOTARY_PROFILE=<profile> to submit the signed pkg to Apple notary
+#     service and staple the ticket. One-time setup:
+#       xcrun notarytool store-credentials <profile> \
+#           --apple-id <you@example.com> --team-id <TEAMID>
+#     (password: an app-specific password from account.apple.com)
 set -e
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,6 +51,23 @@ fi
 # AppleDouble (._*) entries inside the package payload - that is harmless:
 # Installer restores it as an invisible xattr, no ._ files land on disk.
 xattr -rc "$PKGROOT/payload" "$PKGROOT/payload-ofx" "$PKGROOT/payload-fcp" 2>/dev/null || true
+
+# Developer ID-sign the Premiere and OFX payload bundles (the FxPlug app is
+# already signed inside-out by assemble_fxplug.sh at build time). Hardened
+# runtime + secure timestamp are notarization requirements.
+if [ -z "$APP_SIGN_IDENTITY" ]; then
+	APP_SIGN_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
+		| grep "Developer ID Application" | head -1 | awk '{print $2}')
+fi
+if [ -n "$APP_SIGN_IDENTITY" ]; then
+	echo "Signing payload binaries with: $APP_SIGN_IDENTITY"
+	codesign --force --options runtime --timestamp \
+		--sign "$APP_SIGN_IDENTITY" "$PKGROOT/payload/$BUNDLE_BASE.plugin"
+	codesign --force --options runtime --timestamp \
+		--sign "$APP_SIGN_IDENTITY" "$PKGROOT/payload-ofx/$BUNDLE_BASE.ofx.bundle"
+else
+	echo "warning: no Developer ID Application identity - payload binaries keep their build signatures" >&2
+fi
 
 # Builds one component package with bundle relocation disabled. Without
 # this, macOS Installer "helpfully" installs onto any existing copy of the
@@ -163,6 +189,10 @@ cat > "$PKGROOT/distribution.xml" <<XML
 </installer-gui-script>
 XML
 
+if [ -z "$SIGN_IDENTITY" ]; then
+	SIGN_IDENTITY=$(security find-identity -v 2>/dev/null \
+		| grep "Developer ID Installer" | head -1 | awk '{print $2}')
+fi
 if [ -n "$SIGN_IDENTITY" ]; then
 	productbuild \
 		--distribution "$PKGROOT/distribution.xml" \
@@ -170,6 +200,7 @@ if [ -n "$SIGN_IDENTITY" ]; then
 		--sign "$SIGN_IDENTITY" \
 		"$OUT"
 else
+	echo "warning: no Developer ID Installer identity - building UNSIGNED pkg" >&2
 	productbuild \
 		--distribution "$PKGROOT/distribution.xml" \
 		--package-path "$PKGROOT" \
@@ -178,3 +209,15 @@ fi
 
 rm -rf "$PKGROOT"
 echo "Created $OUT"
+
+# Notarize + staple so Gatekeeper accepts the pkg offline on first launch.
+if [ -n "$NOTARY_PROFILE" ]; then
+	if [ -z "$SIGN_IDENTITY" ]; then
+		echo "error: refusing to notarize an unsigned pkg" >&2
+		exit 1
+	fi
+	echo "Submitting to Apple notary service (waits for the verdict)..."
+	xcrun notarytool submit "$OUT" --keychain-profile "$NOTARY_PROFILE" --wait
+	xcrun stapler staple "$OUT"
+	echo "Notarized and stapled $OUT"
+fi

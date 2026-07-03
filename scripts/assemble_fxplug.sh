@@ -1,5 +1,6 @@
 #!/bin/sh
 # Assembles and signs the FxPlug wrapper app + XPC service bundle.
+# Signs with hardened runtime + secure timestamp (required for notarization).
 # Usage: assemble_fxplug.sh <build_dir> <source_root> <app_binary> <service_binary>
 # Names and identifiers come from <build_dir>/edition.sh (written by CMake).
 # Signing identity: SIGN_IDENTITY, else Developer ID, else Apple Development,
@@ -47,7 +48,7 @@ for FW in FxPlug PluginManager; do
 	rsync --archive --links --whole-file --no-owner --no-group \
 		--exclude='Headers' --exclude='Modules' \
 		"$FXPLUG_FRAMEWORKS/$FW.framework/" "$SVC/Contents/Frameworks/$FW.framework/"
-	codesign --force --sign "$IDENTITY" "$SVC/Contents/Frameworks/$FW.framework"
+	codesign --force --options runtime --timestamp --sign "$IDENTITY" "$SVC/Contents/Frameworks/$FW.framework"
 done
 
 # Wrapper app
@@ -70,10 +71,10 @@ fi
 # Sign inside-out. Both the service and the app are sandboxed - PluginKit
 # refuses to register extensions that are not (compare Apple's own
 # InternalFiltersXPC.pluginkit inside Final Cut Pro).
-codesign --force --sign "$IDENTITY" \
+codesign --force --options runtime --timestamp --sign "$IDENTITY" \
 	--entitlements "$SRC/fcp/Sandbox.entitlements" "$SVC"
 # The app additionally gets ~/Movies access for Motion template installation.
-codesign --force --sign "$IDENTITY" \
+codesign --force --options runtime --timestamp --sign "$IDENTITY" \
 	--entitlements "$SRC/fcp/SandboxApp.entitlements" "$APP"
 
 echo "Assembled $APP"

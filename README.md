@@ -166,12 +166,15 @@ same 1080p-reference semantics as the video hosts, scaled by the document's
 shorter dimension. The filter is not yet recordable with parameters in
 Actions (it reruns with its last-used values instead).
 
-A ready-made action (`ps/actions/`) is bundled and offered in the Actions
-panel flyout menu after installation: it duplicates the current layer as a
-smart object, applies the anonymizer as a smart filter, adds an inverted
-(hidden) mask, and selects a white brush — so you just paint where the
-anonymization should appear. Branded editions get a rebranded copy generated
-at build time by `scripts/make_ps_action.py`.
+A ready-made action (`ps/actions/`) is bundled: it duplicates the current
+layer as a smart object, applies the anonymizer as a smart filter, adds an
+inverted (hidden) mask, and selects a white brush — so you just paint where
+the anonymization should appear. The installer imports it into the Actions
+panel automatically (by opening the `.atn` once); it is also copied into
+each Photoshop's `Presets/Actions` for the Classic Actions panel's flyout
+menu, and kept next to the plugin so it can be re-imported any time by
+double-clicking. Branded editions get a rebranded copy generated at build
+time by `scripts/make_ps_action.py`.
 
 ### Installer package
 

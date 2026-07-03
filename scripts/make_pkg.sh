@@ -152,20 +152,29 @@ exit 0
 PREINST
 	chmod +x "$PS_SCRIPTS/preinstall"
 	# Copy the bundled action into every installed Photoshop's Presets/Actions
-	# folder so it shows in the Actions panel flyout menu for one-click load.
+	# folder (visible in the Classic Actions panel's flyout menu), then open
+	# the .atn once as the logged-in user: that imports it straight into the
+	# user's Actions palette, which is the only route the new (non-classic)
+	# Actions panel offers besides a manual Import Actions...
 	cat > "$PS_SCRIPTS/postinstall" <<POSTINSTALL
 #!/bin/sh
 for _presets in "/Applications/Adobe Photoshop "*/Presets/Actions; do
 	[ -d "\$_presets" ] || continue
 	cp -f "${PS_INSTALL_LOCATION}/${BUNDLE_BASE}Action.atn" "\$_presets/" 2>/dev/null || true
 done
+if ls -d "/Applications/Adobe Photoshop "* >/dev/null 2>&1; then
+	LOGGED_IN_USER=\$(stat -f "%Su" /dev/console 2>/dev/null)
+	if [ -n "\$LOGGED_IN_USER" ] && [ "\$LOGGED_IN_USER" != "root" ]; then
+		sudo -u "\$LOGGED_IN_USER" /usr/bin/open "${PS_INSTALL_LOCATION}/${BUNDLE_BASE}Action.atn" 2>/dev/null || true
+	fi
+fi
 exit 0
 POSTINSTALL
 	chmod +x "$PS_SCRIPTS/postinstall"
 	build_component "$PKGROOT/payload-ps" "$PS_INSTALL_LOCATION" "$ID_PS" "$PKGROOT/component-ps.pkg" "$PS_SCRIPTS"
 	PS_CHOICE_OUTLINE='<line choice="photoshop"/>'
 	PS_CHOICE='<choice id="photoshop" title="Photoshop plugin"
-		description="Installs '$BUNDLE_BASE'PS.plugin into the shared Creative Cloud plugin folder (all Photoshop versions), plus a ready-made action (mask-based selective anonymization) offered in the Actions panel menu.">
+		description="Installs '$BUNDLE_BASE'PS.plugin into the shared Creative Cloud plugin folder (all Photoshop versions), plus a ready-made action (mask-based selective anonymization) that is imported into Photoshop automatically at the end of installation.">
 		<pkg-ref id="'$ID_PS'"/>
 	</choice>'
 	PS_PKGREF='<pkg-ref id="'$ID_PS'" version="'$VERSION'" onConclusion="none">component-ps.pkg</pkg-ref>'

@@ -30,5 +30,7 @@ if [ -f "$ACTION" ]; then
 		[ -d "$_presets" ] || continue
 		sudo cp -f "$ACTION" "$_presets/"
 	done
+	# Opening the .atn imports it into the Actions palette (both panel modes).
+	open "$DEST/${BUNDLE_BASE}Action.atn" 2>/dev/null || true
 fi
 echo "Installed. Restart Photoshop."

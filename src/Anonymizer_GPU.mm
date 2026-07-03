@@ -173,12 +173,6 @@ public:
 		const int srcPitch = rowBytes / bytesPerPixel;
 		const int dstPitch = srcPitch;
 
-		// DEBUG: log frame geometry so we can see what Premiere passes for
-		// matched vs mismatched clip/sequence aspect ratios. Check Console.app.
-		NSLog(@"[Anonymizer GPU] bounds=(%d,%d,%d,%d) w=%d h=%d pitch=%d",
-			bounds.left, bounds.top, bounds.right, bounds.bottom,
-			width, height, srcPitch);
-
 		void* frameData = 0;
 		mGPUDeviceSuite->GetGPUPPixData(ioPPix, &frameData);
 		if (!frameData)
@@ -230,11 +224,6 @@ public:
 		}
 		const float distortBiasDx = biasSamples > 0 ? (sumBiasDx / (float)biasSamples) * 2.0f - 1.0f : 0.0f;
 		const float distortBiasDy = biasSamples > 0 ? (sumBiasDy / (float)biasSamples) * 2.0f - 1.0f : 0.0f;
-
-		NSLog(@"[Anonymizer GPU] frame=%d seed=%u ds=%.3f distortAmount=%.2f distortScale=%.2f biasDx=%.4f biasDy=%.4f samples=%d",
-			frame, seed, (float)AnonResolutionScale(width, height),
-			(float)distortAmount, (float)distortScale,
-			distortBiasDx, distortBiasDy, biasSamples);
 
 		const int blurRadiusInt = std::min((int)ceilf(blurRadius), 512);
 		const float blurSigma = std::max(blurRadius * 0.5f, 0.1f);

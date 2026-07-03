@@ -71,7 +71,7 @@ With these values, all three kernels are pixel-exact copies (`src[y*pitch+x] →
 Shift still present, image position unchanged from the all-enabled case.
 → None of our three processing passes cause the shift.
 
-### Root Cause (revised 2026-07-03, fix implemented — awaiting user verification)
+### Root Cause (revised 2026-07-03, fix VERIFIED by user in Premiere)
 
 The earlier conclusion ("Premiere compositing bug, nothing we can do") was wrong — the
 "even a no-op copy shifts" observation pointed at frame *metadata*, not pixel processing.
@@ -91,11 +91,11 @@ place". The frame keeps its bounds/placement metadata. No aliasing hazard: the m
 chain reads the frame only in the first pass (into tmpA) and writes it only in the last, and
 the blackout kernel touches each pixel exactly once.
 
-**To verify:** rebuild + reinstall, apply the effect to a 16:9 clip in a 9:16 sequence (and
-vice versa) — the image should no longer move. The `[Anonymizer GPU]` NSLog now also prints
-`bounds=` for the frame; for a mismatched clip a non-zero left/top confirms the diagnosis.
+**Verified 2026-07-03:** with the fixed build, a 16:9 clip in a 9:16 sequence renders in the
+correct position with the effect applied. (Test tip: `install.sh` with no argument installs
+only the OSS edition — other editions need `install.sh <their build dir>` separately.)
 
-### Workaround for Users (obsolete if the fix verifies)
+### Workaround for Users (obsolete — kept for reference)
 
 **Nest the clip:**
 1. Create a sequence matching the clip's native AR (e.g., 16:9 for a 16:9 clip).
@@ -109,7 +109,7 @@ sequence without the GPU-effect compositing bug.
 
 ## Remaining Cleanup
 
-- [ ] Remove the two temporary `NSLog` debug statements from `src/Anonymizer_GPU.mm` once the AR-shift fix is user-verified (search for `[Anonymizer GPU]`)
+- [x] Remove the two temporary `NSLog` debug statements from `src/Anonymizer_GPU.mm` (done after the AR-shift fix was verified)
 - [ ] Rebuild and package OSS edition with all session fixes
 - [ ] Sign and notarize the branded edition package
 - [ ] Investigate FCP stuttery mask movement (low priority, not yet started)

@@ -100,17 +100,6 @@ PF_Err ParamsSetup(
 		"Square|Triangle|Hexagon",
 		ANON_MOSAIC_SHAPE);
 
-	// Read-only version display: single-item popup, cannot be changed by the user.
-#define ANON_STR_(x) #x
-#define ANON_STR(x) ANON_STR_(x)
-	AEFX_CLR_STRUCT(def);
-	PF_ADD_POPUP("Version",
-		1, 1,
-		"v" ANON_STR(MAJOR_VERSION) "." ANON_STR(MINOR_VERSION) "." ANON_STR(BUG_VERSION),
-		ANON_VERSION_DISPLAY);
-#undef ANON_STR
-#undef ANON_STR_
-
 	out_data->num_params = ANON_NUM_PARAMS;
 	return PF_Err_NONE;
 }

@@ -208,6 +208,90 @@ static bool IsGrayMode(int16 mode)
 		mode == plugInModeGray32;
 }
 
+/* ---- proxy fetch for the dialog's live preview ---- */
+
+/*
+** Reads a subsampled copy of the filtered region via advanceState with a
+** fixed-point inputRate, converted to packed RGBA float. Rects passed to
+** the host while a rate is active are in the scaled coordinate space.
+** Returns false (leaving *gResult untouched on soft failures) if no proxy
+** could be produced - the dialog then simply has no preview.
+*/
+static bool FetchProxy(std::vector<float>& outBuf, PSPreviewContext* outCtx)
+{
+	const VRect filterRect = GetFilterRect();
+	const int32 w = filterRect.right - filterRect.left;
+	const int32 h = filterRect.bottom - filterRect.top;
+	if (w <= 0 || h <= 0)
+		return false;
+
+	const int32 kMaxProxy = 560; /* fetch ~2x the view size for Retina */
+	const int32 s = std::max((int32)1, (std::max(w, h) + kMaxProxy - 1) / kMaxProxy);
+	const int32 pw = w / s;
+	const int32 ph = h / s;
+	if (pw < 1 || ph < 1)
+		return false;
+
+	const int32 depth = gFilterRecord->depth;
+	const int procPlanes = std::min((int)gFilterRecord->planes, 4);
+	if (procPlanes < 1)
+		return false;
+
+	outBuf.resize((size_t)pw * ph * 4);
+
+	VRect proxyRect;
+	proxyRect.left = filterRect.left / s;
+	proxyRect.top = filterRect.top / s;
+	proxyRect.right = proxyRect.left + pw;
+	proxyRect.bottom = proxyRect.top + ph;
+
+	const VRect zeroRect = { 0, 0, 0, 0 };
+	SetOutRect(zeroRect);
+	SetMaskRect(zeroRect);
+	gFilterRecord->inputRate = (int32)s << 16;
+	gFilterRecord->maskRate = (int32)s << 16;
+	gFilterRecord->inLoPlane = 0;
+	gFilterRecord->inHiPlane = (int16)(procPlanes - 1);
+	SetInRect(proxyRect);
+
+	const OSErr err = gFilterRecord->advanceState();
+
+	bool ok = err == noErr;
+	if (ok)
+	{
+		for (int32 y = 0; y < ph; ++y)
+		{
+			const uint8* row = (const uint8*)gFilterRecord->inData +
+				(size_t)y * gFilterRecord->inRowBytes;
+			float* out = outBuf.data() + ((size_t)y * pw) * 4;
+			for (int32 x = 0; x < pw; ++x, out += 4)
+			{
+				const uint8* pixel = row + (size_t)x * gFilterRecord->inColumnBytes;
+				out[0] = ReadChannel(pixel, depth, 0);
+				out[1] = procPlanes > 1 ? ReadChannel(pixel, depth, 1) : 0.0f;
+				out[2] = procPlanes > 2 ? ReadChannel(pixel, depth, 2) : 0.0f;
+				out[3] = procPlanes > 3 ? ReadChannel(pixel, depth, 3) : 1.0f;
+			}
+		}
+	}
+
+	/* Restore full-resolution state for the real render. */
+	gFilterRecord->inputRate = (int32)1 << 16;
+	gFilterRecord->maskRate = (int32)1 << 16;
+	SetInRect(zeroRect);
+
+	if (!ok)
+		return false;
+
+	const VPoint imageSize = GetImageSize();
+	outCtx->pixels = outBuf.data();
+	outCtx->width = (int)pw;
+	outCtx->height = (int)ph;
+	outCtx->ds = AnonResolutionScale((int)(imageSize.h / s), (int)(imageSize.v / s));
+	outCtx->colorPlanes = IsGrayMode(gFilterRecord->imageMode) ? 1 : 3;
+	return true;
+}
+
 /* ---- the filter ---- */
 
 static void DoFilterImpl(void)
@@ -389,7 +473,10 @@ static void DoStart(void)
 	bool run = true;
 	if (gData->queryForParameters)
 	{
-		run = DoParamDialog(gParams);
+		std::vector<float> proxyPixels;
+		PSPreviewContext preview = {};
+		const bool hasProxy = FetchProxy(proxyPixels, &preview);
+		run = DoParamDialog(gParams, hasProxy ? &preview : NULL);
 		gData->queryForParameters = false;
 	}
 

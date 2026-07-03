@@ -34,10 +34,27 @@ typedef struct PSParameters
 } PSParameters;
 
 /*
+** Downscaled copy of the filtered region for the dialog's live preview.
+** pixels is packed RGBA float (pitch == width); ds is the resolution scale
+** the preview passes must use so the proxy approximates the full-res
+** result; colorPlanes is 1 for grayscale documents, else 3.
+*/
+typedef struct PSPreviewContext
+{
+	const float* pixels;
+	int width;
+	int height;
+	float ds;
+	int colorPlanes;
+} PSPreviewContext;
+
+/*
 ** Implemented in AnonymizerPSUI.mm. Returns true if the user confirmed.
 ** The dialog edits ioParams in place; the caller restores on cancel.
+** preview may be NULL (or have NULL pixels) - the dialog then runs
+** without the live preview.
 */
-bool DoParamDialog(PSParameters* ioParams);
+bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* preview);
 void DoAboutDialog(void);
 
 #endif

@@ -16,10 +16,13 @@ int main()
 {
 	check(AnonAlgo::BlurRadiusForOrderChange(15.0, true) == 35.0,
 		"Enabling blur after mosaic should promote the default to 35");
+	check(AnonAlgo::BlurRadiusForOrderChange(35.0, false) == 15.0,
+		"Disabling blur after mosaic should restore the default to 15");
 	for (double radius : {0.0, 10.0, 15.0, 20.0, 35.0, 100.0})
 	{
-		check(AnonAlgo::BlurRadiusForOrderChange(radius, false) == radius,
-			"Disabling blur after mosaic should preserve the radius");
+		if (radius != BLUR_AFTER_MOSAIC_RADIUS_DFLT)
+			check(AnonAlgo::BlurRadiusForOrderChange(radius, false) == radius,
+				"Disabling blur after mosaic should preserve a customized radius");
 		if (radius != BLUR_RADIUS_DFLT)
 			check(AnonAlgo::BlurRadiusForOrderChange(radius, true) == radius,
 				"Enabling blur after mosaic should preserve a customized radius");

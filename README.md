@@ -43,7 +43,8 @@ but they do not guarantee that identifying information is unrecoverable.
 
 Enable **Blur After Mosaic** for a softer appearance with less visible tiling.
 Enabling it raises Blur Radius from the default 15 to 35; customized values are
-preserved. Turning it off keeps the current radius. Increase Blur Radius if cell
+preserved. Turning it off changes 35 back to 15 and preserves other values.
+Increase Blur Radius if cell
 edges remain obvious. The default order stays
 distortion → blur → mosaic; with a zero blur radius, both orders match.
 

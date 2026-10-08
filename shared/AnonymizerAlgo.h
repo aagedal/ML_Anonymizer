@@ -92,12 +92,15 @@ static inline uint32_t AnonComputeSeed(double inSeedParam, bool inJitter, int32_
 namespace AnonAlgo
 {
 
-// Only promote the untouched blur default when the user enables the new order.
-// Turning it off, loading a project, and rendering do not rewrite settings.
+// Switch between the two blur defaults on user checkbox changes.
+// Preserve other values; loading a project and rendering do not rewrite settings.
 inline double BlurRadiusForOrderChange(double radius, bool blurAfterMosaic)
 {
-	return blurAfterMosaic && radius == BLUR_RADIUS_DFLT
-		? BLUR_AFTER_MOSAIC_RADIUS_DFLT : radius;
+	if (blurAfterMosaic && radius == BLUR_RADIUS_DFLT)
+		return BLUR_AFTER_MOSAIC_RADIUS_DFLT;
+	if (!blurAfterMosaic && radius == BLUR_AFTER_MOSAIC_RADIUS_DFLT)
+		return BLUR_RADIUS_DFLT;
+	return radius;
 }
 
 

@@ -87,6 +87,35 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	return YES;
 }
 
+- (BOOL)parameterChanged:(UInt32)paramID atTime:(CMTime)time error:(NSError**)error
+{
+	if (paramID != kParamID_BlurAfterMosaic)
+		return YES;
+
+	id<FxParameterRetrievalAPI_v6> retrieval = [_apiManager apiForProtocol:@protocol(FxParameterRetrievalAPI_v6)];
+	id<FxParameterSettingAPI_v5> setting = [_apiManager apiForProtocol:@protocol(FxParameterSettingAPI_v5)];
+	BOOL enabled = NO;
+	double current = BLUR_RADIUS_DFLT;
+	if (retrieval == nil || setting == nil ||
+		![retrieval getBoolValue:&enabled fromParameter:kParamID_BlurAfterMosaic atTime:time] ||
+		![retrieval getFloatValue:&current fromParameter:kParamID_BlurRadius atTime:time])
+	{
+		if (error != NULL)
+			*error = [NSError errorWithDomain:FxPlugErrorDomain code:kFxError_APIUnavailable
+				userInfo:@{NSLocalizedDescriptionKey: @"Unable to read blur parameters"}];
+		return NO;
+	}
+	const double radius = AnonAlgo::BlurRadiusForOrderChange(current, enabled);
+	if (radius != current && ![setting setFloatValue:radius toParameter:kParamID_BlurRadius atTime:time])
+	{
+		if (error != NULL)
+			*error = [NSError errorWithDomain:FxPlugErrorDomain code:kFxError_InvalidParameter
+				userInfo:@{NSLocalizedDescriptionKey: @"Unable to update Blur Radius"}];
+		return NO;
+	}
+	return YES;
+}
+
 - (BOOL)addParametersWithError:(NSError**)error
 {
 	id<FxParameterCreationAPI_v5> paramAPI =

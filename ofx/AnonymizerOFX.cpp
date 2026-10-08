@@ -209,6 +209,22 @@ public:
 		}
 	}
 
+	void changedParam(const OFX::InstanceChangedArgs& args, const std::string& name) override
+	{
+		if (name != "blurAfterMosaic" || args.reason != OFX::eChangeUserEdit)
+			return;
+		const double current = m_BlurRadius->getValueAtTime(args.time);
+		const double radius = AnonAlgo::BlurRadiusForOrderChange(current,
+			m_BlurAfterMosaic->getValueAtTime(args.time));
+		if (radius != current)
+		{
+			if (m_BlurRadius->getNumKeys() == 0)
+				m_BlurRadius->setValue(radius);
+			else
+				m_BlurRadius->setValueAtTime(args.time, radius);
+		}
+	}
+
 	// Do not claim identity from unscaled controls: a 1px mosaic at the
 	// 1080p reference becomes 2px at 4K. The render pipeline handles
 	// disabled stages after scaling to the actual image bounds.

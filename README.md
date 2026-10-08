@@ -42,7 +42,9 @@ but they do not guarantee that identifying information is unrecoverable.
 | Blackout | Off | Solid black instead of the distort/blur/mosaic stack (source alpha preserved) |
 
 Enable **Blur After Mosaic** for a softer appearance with less visible tiling.
-Increase Blur Radius if cell edges remain obvious. The default order stays
+Enabling it raises Blur Radius from the default 15 to 35; customized values are
+preserved. Turning it off keeps the current radius. Increase Blur Radius if cell
+edges remain obvious. The default order stays
 distortion → blur → mosaic; with a zero blur radius, both orders match.
 
 Pixel-space parameters are specified **at a 1080p reference** and scale with

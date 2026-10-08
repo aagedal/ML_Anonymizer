@@ -102,7 +102,7 @@ PF_Err ParamsSetup(
 
 	AEFX_CLR_STRUCT(def);
 	PF_ADD_CHECKBOXX("Blur After Mosaic",
-		FALSE, 0, ANON_BLUR_AFTER_MOSAIC);
+		FALSE, PF_ParamFlag_SUPERVISE, ANON_BLUR_AFTER_MOSAIC);
 
 	out_data->num_params = ANON_NUM_PARAMS;
 	return PF_Err_NONE;
@@ -260,6 +260,19 @@ extern "C" DllExport PF_Err EffectMain(
 		break;
 	case PF_Cmd_PARAMS_SETUP:
 		err = ParamsSetup(in_data, out_data, params, inOutput);
+		break;
+	case PF_Cmd_USER_CHANGED_PARAM:
+		if (extra && ((PF_UserChangedParamExtra*)extra)->param_index == ANON_BLUR_AFTER_MOSAIC)
+		{
+			PF_ParamDef* blur = params[ANON_BLUR_RADIUS];
+			const double radius = BlurRadiusForOrderChange(blur->u.fs_d.value,
+				params[ANON_BLUR_AFTER_MOSAIC]->u.bd.value != 0);
+			if (radius != blur->u.fs_d.value)
+			{
+				blur->u.fs_d.value = radius;
+				blur->uu.change_flags |= PF_ChangeFlag_CHANGED_VALUE;
+			}
+		}
 		break;
 	case PF_Cmd_RENDER:
 		err = Render(in_data, out_data, params, inOutput);

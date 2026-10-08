@@ -81,6 +81,9 @@
 
 - (void)controlChanged:(id)sender
 {
+	if (sender == blurAfterMosaic)
+		[blur setValue:AnonAlgo::BlurRadiusForOrderChange([blur value],
+			blurAfterMosaic.state == NSControlStateValueOn)];
 	[self refreshPreview];
 }
 

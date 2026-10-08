@@ -14,6 +14,16 @@ static void check(bool ok, const char* message)
 
 int main()
 {
+	check(AnonAlgo::BlurRadiusForOrderChange(15.0, true) == 35.0,
+		"Enabling blur after mosaic should promote the default to 35");
+	for (double radius : {0.0, 10.0, 15.0, 20.0, 35.0, 100.0})
+	{
+		check(AnonAlgo::BlurRadiusForOrderChange(radius, false) == radius,
+			"Disabling blur after mosaic should preserve the radius");
+		if (radius != BLUR_RADIUS_DFLT)
+			check(AnonAlgo::BlurRadiusForOrderChange(radius, true) == radius,
+				"Enabling blur after mosaic should preserve a customized radius");
+	}
 	int cases = 0;
 	for (auto size : {std::pair<int, int>{1, 1}, {7, 3}, {31, 23}})
 	for (int shape = 0; shape < 3; ++shape)

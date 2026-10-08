@@ -33,6 +33,7 @@
 #define BLUR_RADIUS_MIN      0.0
 #define BLUR_RADIUS_MAX      100.0
 #define BLUR_RADIUS_DFLT     15.0
+#define BLUR_AFTER_MOSAIC_RADIUS_DFLT 35.0
 
 #define MOSAIC_SIZE_MIN      1.0
 #define MOSAIC_SIZE_MAX      256.0
@@ -90,6 +91,15 @@ static inline uint32_t AnonComputeSeed(double inSeedParam, bool inJitter, int32_
 
 namespace AnonAlgo
 {
+
+// Only promote the untouched blur default when the user enables the new order.
+// Turning it off, loading a project, and rendering do not rewrite settings.
+inline double BlurRadiusForOrderChange(double radius, bool blurAfterMosaic)
+{
+	return blurAfterMosaic && radius == BLUR_RADIUS_DFLT
+		? BLUR_AFTER_MOSAIC_RADIUS_DFLT : radius;
+}
+
 
 inline float Rand01(int32_t ix, int32_t iy, uint32_t seed, uint32_t channel)
 {

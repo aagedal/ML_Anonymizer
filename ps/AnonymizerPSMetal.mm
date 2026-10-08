@@ -110,7 +110,7 @@ static void DispatchPass(
 
 bool RunMetalPasses(float* buf, int w, int h,
 	float amount, float scale, float blurRadius, float mosaicSize,
-	int mosaicShape, uint32_t seed)
+	int mosaicShape, uint32_t seed, bool blurAfterMosaic)
 {
 	@autoreleasepool
 	{
@@ -164,16 +164,27 @@ bool RunMetalPasses(float* buf, int w, int h,
 		commandBuffer.label = @"MultiLayerAnonymizerPS";
 		id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
 
-		/* src -> distort -> A -> blurH -> B -> blurV -> A -> mosaic -> dst */
+		/* Distortion, then blur/mosaic in the selected order; result in dst. */
 		DispatchPass(encoder, sPipelines[kKernelDistort], src, tmpA, params);
-		if (params.mBlurRadius >= 1)
+		if (blurAfterMosaic && params.mBlurRadius >= 1)
 		{
+			DispatchPass(encoder, sPipelines[kKernelMosaic], tmpA, tmpB, params);
 			params.mBlurDir = 0;
-			DispatchPass(encoder, sPipelines[kKernelBlur], tmpA, tmpB, params);
-			params.mBlurDir = 1;
 			DispatchPass(encoder, sPipelines[kKernelBlur], tmpB, tmpA, params);
+			params.mBlurDir = 1;
+			DispatchPass(encoder, sPipelines[kKernelBlur], tmpA, dst, params);
 		}
-		DispatchPass(encoder, sPipelines[kKernelMosaic], tmpA, dst, params);
+		else
+		{
+			if (params.mBlurRadius >= 1)
+			{
+				params.mBlurDir = 0;
+				DispatchPass(encoder, sPipelines[kKernelBlur], tmpA, tmpB, params);
+				params.mBlurDir = 1;
+				DispatchPass(encoder, sPipelines[kKernelBlur], tmpB, tmpA, params);
+			}
+			DispatchPass(encoder, sPipelines[kKernelMosaic], tmpA, dst, params);
+		}
 
 		[encoder endEncoding];
 		[commandBuffer commit];

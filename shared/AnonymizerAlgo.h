@@ -342,12 +342,21 @@ inline void MosaicPass(const float* src, float* dst, int w, int h, float blockSi
 // using the caller's scratch buffer of the same size. Result lands in `buf`.
 inline void RunLayeredPasses(float* buf, float* scratch, int w, int h,
 	float amount, float scale, float blurRadius, float mosaicSize, int mosaicShape,
-	uint32_t seed)
+	uint32_t seed, bool blurAfterMosaic = false)
 {
 	DistortPass(buf, scratch, w, h, amount, scale, seed);
-	BlurPass(scratch, buf, w, h, blurRadius, 0);
-	BlurPass(buf, scratch, w, h, blurRadius, 1);
-	MosaicPass(scratch, buf, w, h, mosaicSize, mosaicShape);
+	if (blurAfterMosaic)
+	{
+		MosaicPass(scratch, buf, w, h, mosaicSize, mosaicShape);
+		BlurPass(buf, scratch, w, h, blurRadius, 0);
+		BlurPass(scratch, buf, w, h, blurRadius, 1);
+	}
+	else
+	{
+		BlurPass(scratch, buf, w, h, blurRadius, 0);
+		BlurPass(buf, scratch, w, h, blurRadius, 1);
+		MosaicPass(scratch, buf, w, h, mosaicSize, mosaicShape);
+	}
 }
 
 } // namespace AnonAlgo

@@ -31,6 +31,7 @@ typedef struct PSParameters
 	double mosaicSize;
 	int32 mosaicShape; /* ANON_SHAPE_* */
 	Boolean blackout;
+	int32 blurAfterMosaic;
 } PSParameters;
 
 /*
@@ -64,6 +65,6 @@ void DoAboutDialog(void);
 */
 bool RunMetalPasses(float* buf, int w, int h,
 	float amount, float scale, float blurRadius, float mosaicSize,
-	int mosaicShape, uint32_t seed);
+	int mosaicShape, uint32_t seed, bool blurAfterMosaic);
 
 #endif

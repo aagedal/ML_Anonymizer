@@ -115,12 +115,32 @@ static void InitParameters(PSParameters* p)
 	p->mosaicSize = MOSAIC_SIZE_DFLT;
 	p->mosaicShape = ANON_SHAPE_SQUARE;
 	p->blackout = false;
+	p->blurAfterMosaic = false;
 }
 
 static void EnsureParametersHandle(void)
 {
 	if (gFilterRecord->parameters != NULL)
+	{
+		// Older versions stored only the fields preceding blurAfterMosaic.
+		if (gFilterRecord->handleProcs->getSizeProc(gFilterRecord->parameters) < (int32)sizeof(PSParameters))
+		{
+			*gResult = gFilterRecord->handleProcs->setSizeProc(
+				gFilterRecord->parameters, sizeof(PSParameters));
+			if (*gResult != noErr)
+				return;
+			PSParameters* p = (PSParameters*)gFilterRecord->handleProcs->lockProc(
+				gFilterRecord->parameters, TRUE);
+			if (p == NULL)
+			{
+				*gResult = memFullErr;
+				return;
+			}
+			p->blurAfterMosaic = false;
+			gFilterRecord->handleProcs->unlockProc(gFilterRecord->parameters);
+		}
 		return;
+	}
 	gFilterRecord->parameters =
 		gFilterRecord->handleProcs->newProc(sizeof(PSParameters));
 	if (gFilterRecord->parameters == NULL)
@@ -391,7 +411,7 @@ static void DoFilterImpl(void)
 				buf[i * 4 + c] = 0.0f;
 	}
 	else if (!RunMetalPasses(buf, (int)w, (int)h,
-				amount, scale, blurRadius, mosaicSize, mosaicShape, 0u))
+				amount, scale, blurRadius, mosaicSize, mosaicShape, 0u, gParams->blurAfterMosaic != 0))
 	{
 		scratch = (float*)malloc((size_t)w * h * 4 * sizeof(float));
 		if (scratch == NULL)
@@ -400,7 +420,7 @@ static void DoFilterImpl(void)
 			goto cleanup;
 		}
 		AnonAlgo::RunLayeredPasses(buf, scratch, (int)w, (int)h,
-			amount, scale, blurRadius, mosaicSize, mosaicShape, 0u);
+			amount, scale, blurRadius, mosaicSize, mosaicShape, 0u, gParams->blurAfterMosaic != 0);
 	}
 
 	/* Write the result back band by band. */

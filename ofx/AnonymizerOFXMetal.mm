@@ -29,6 +29,7 @@ struct AnonRenderSettings
 	uint32_t seed;
 	bool blackout;
 	int mosaicShape;
+	bool blurAfterMosaic;
 };
 
 /*
@@ -197,20 +198,31 @@ void RunMetalAnonymizer(void* p_CmdQ, int p_Width, int p_Height,
 	}
 
 	// Two packed temp buffers for the pass chain:
-	// src -> distort -> A -> blurH -> B -> blurV -> A -> mosaic -> dst
+	// Distortion, then blur/mosaic in the selected order; result in dst.
 	const size_t tmpBytes = (size_t)p_Width * p_Height * 4 * sizeof(float);
 	id<MTLBuffer> tmpA = [device newBufferWithLength:tmpBytes options:MTLResourceStorageModePrivate];
 	id<MTLBuffer> tmpB = [device newBufferWithLength:tmpBytes options:MTLResourceStorageModePrivate];
 
 	DispatchPass(encoder, pipelines.p[kKernelDistort], srcBuffer, tmpA, params);
-	if (params.mBlurRadius >= 1)
+	if (p_Settings.blurAfterMosaic && params.mBlurRadius >= 1)
 	{
+		DispatchPass(encoder, pipelines.p[kKernelMosaic], tmpA, tmpB, params);
 		params.mBlurDir = 0;
-		DispatchPass(encoder, pipelines.p[kKernelBlur], tmpA, tmpB, params);
-		params.mBlurDir = 1;
 		DispatchPass(encoder, pipelines.p[kKernelBlur], tmpB, tmpA, params);
+		params.mBlurDir = 1;
+		DispatchPass(encoder, pipelines.p[kKernelBlur], tmpA, dstBuffer, params);
 	}
-	DispatchPass(encoder, pipelines.p[kKernelMosaic], tmpA, dstBuffer, params);
+	else
+	{
+		if (params.mBlurRadius >= 1)
+		{
+			params.mBlurDir = 0;
+			DispatchPass(encoder, pipelines.p[kKernelBlur], tmpA, tmpB, params);
+			params.mBlurDir = 1;
+			DispatchPass(encoder, pipelines.p[kKernelBlur], tmpB, tmpA, params);
+		}
+		DispatchPass(encoder, pipelines.p[kKernelMosaic], tmpA, dstBuffer, params);
+	}
 
 	[encoder endEncoding];
 	[commandBuffer addCompletedHandler:^(id<MTLCommandBuffer>) {

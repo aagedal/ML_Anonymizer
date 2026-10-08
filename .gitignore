@@ -13,3 +13,24 @@ fcp/templates/*
 sdk/
 
 .DS_Store
+
+# Generated installers, distribution archives, and compiler output
+*.pkg
+*.dmg
+*.zip
+*.xcarchive
+*.o
+*.dSYM/
+compile_commands.json
+Testing/
+
+# Local configuration and signing credentials
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.mobileprovision
+
+# macOS metadata
+._*

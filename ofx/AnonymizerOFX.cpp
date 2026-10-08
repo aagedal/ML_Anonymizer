@@ -40,8 +40,8 @@
 	"deblurring or mosaic-reconstruction tools. Blackout replaces the " \
 	"stack with solid black."
 #define kPluginIdentifier ANON_OFX_PLUGIN_ID
-#define kPluginVersionMajor 1
-#define kPluginVersionMinor 4
+#define kPluginVersionMajor MAJOR_VERSION
+#define kPluginVersionMinor MINOR_VERSION
 
 #define kSupportsTiles false
 #define kSupportsMultiResolution false
@@ -56,6 +56,7 @@ struct AnonRenderSettings
 	uint32_t seed;
 	bool blackout;
 	int mosaicShape;
+	bool blurAfterMosaic;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -150,7 +151,7 @@ void AnonymizerProcessor::computeFullCPU()
 	AnonAlgo::RunLayeredPasses(_cpuResult.data(), scratch.data(), w, h,
 		_settings.distortAmount, _settings.distortScale,
 		_settings.blurRadius, _settings.mosaicSize, _settings.mosaicShape,
-		_settings.seed);
+		_settings.seed, _settings.blurAfterMosaic);
 }
 
 void AnonymizerProcessor::multiThreadProcessImages(OfxRectI p_ProcWindow)
@@ -191,6 +192,7 @@ public:
 		m_TemporalJitter = fetchBooleanParam("temporalJitter");
 		m_Blackout = fetchBooleanParam("blackout");
 		m_MosaicShape = fetchChoiceParam("mosaicShape");
+		m_BlurAfterMosaic = fetchBooleanParam("blurAfterMosaic");
 	}
 
 	virtual void render(const OFX::RenderArguments& p_Args)
@@ -207,25 +209,10 @@ public:
 		}
 	}
 
-	virtual bool isIdentity(const OFX::IsIdentityArguments& p_Args,
-		OFX::Clip*& p_IdentityClip, double& p_IdentityTime)
-	{
-		if (m_Blackout->getValueAtTime(p_Args.time))
-			return false;
+	// Do not claim identity from unscaled controls: a 1px mosaic at the
+	// 1080p reference becomes 2px at 4K. The render pipeline handles
+	// disabled stages after scaling to the actual image bounds.
 
-		const bool noDistort = m_DistortAmount->getValueAtTime(p_Args.time) <= 0.001;
-		const bool noBlur = m_BlurRadius->getValueAtTime(p_Args.time) < 0.5;
-		const bool noMosaic = m_MosaicSize->getValueAtTime(p_Args.time) < 1.5;
-		if (noDistort && noBlur && noMosaic)
-		{
-			p_IdentityClip = m_SrcClip;
-			p_IdentityTime = p_Args.time;
-			return true;
-		}
-		return false;
-	}
-
-private:
 	void setupAndProcess(AnonymizerProcessor& p_Processor, const OFX::RenderArguments& p_Args)
 	{
 		std::unique_ptr<OFX::Image> dst(m_DstClip->fetchImage(p_Args.time));
@@ -249,6 +236,7 @@ private:
 		settings.blurRadius = (float)m_BlurRadius->getValueAtTime(p_Args.time) * ds;
 		settings.mosaicSize = (float)m_MosaicSize->getValueAtTime(p_Args.time) * ds;
 		settings.blackout = m_Blackout->getValueAtTime(p_Args.time);
+		settings.blurAfterMosaic = m_BlurAfterMosaic->getValueAtTime(p_Args.time);
 		int shape = ANON_SHAPE_SQUARE;
 		m_MosaicShape->getValueAtTime(p_Args.time, shape);
 		settings.mosaicShape = (shape >= ANON_SHAPE_SQUARE && shape <= ANON_SHAPE_HEXAGON)
@@ -278,6 +266,7 @@ private:
 	OFX::BooleanParam* m_TemporalJitter;
 	OFX::BooleanParam* m_Blackout;
 	OFX::ChoiceParam* m_MosaicShape;
+	OFX::BooleanParam* m_BlurAfterMosaic;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -374,6 +363,12 @@ public:
 		shape->appendOption("Hexagon");
 		shape->setDefault(ANON_SHAPE_SQUARE);
 		page->addChild(*shape);
+
+		BooleanParamDescriptor* blurAfter = p_Desc.defineBooleanParam("blurAfterMosaic");
+		blurAfter->setLabels("Blur After Mosaic", "Blur After Mosaic", "Blur After Mosaic");
+		blurAfter->setHint("Apply blur after mosaic to soften the visible cell edges");
+		blurAfter->setDefault(false);
+		page->addChild(*blurAfter);
 	}
 
 	virtual ImageEffect* createInstance(OfxImageEffectHandle p_Handle, ContextEnum /*p_Context*/)

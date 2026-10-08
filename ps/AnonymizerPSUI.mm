@@ -43,6 +43,7 @@
 	AnonSliderRow* mosaic;
 	NSPopUpButton* shape;
 	NSButton* blackout;
+	NSButton* blurAfterMosaic;
 	NSImageView* previewView;
 	PSPreviewContext preview; /* pixels == NULL when there is no preview */
 	std::vector<float> work;
@@ -91,18 +92,20 @@
 	[mosaic setValue:MOSAIC_SIZE_DFLT];
 	[shape selectItemAtIndex:ANON_SHAPE_SQUARE];
 	blackout.state = NSControlStateValueOff;
+	blurAfterMosaic.state = NSControlStateValueOff;
 	[self refreshPreview];
 }
 
 - (PSParameters)readParameters
 {
-	PSParameters p;
+	PSParameters p = {};
 	p.distortAmount = [amount value];
 	p.distortScale = [scale value];
 	p.blurRadius = [blur value];
 	p.mosaicSize = [mosaic value];
 	p.mosaicShape = (int32)[shape indexOfSelectedItem];
 	p.blackout = blackout.state == NSControlStateValueOn;
+	p.blurAfterMosaic = blurAfterMosaic.state == NSControlStateValueOn;
 	return p;
 }
 
@@ -134,7 +137,7 @@
 			std::max((float)p.distortScale * ds, 2.0f),
 			std::min((float)p.blurRadius * ds, 512.0f),
 			std::max((float)p.mosaicSize * ds, 1.0f),
-			shapeIdx, 0u);
+			shapeIdx, 0u, p.blurAfterMosaic != 0);
 	}
 
 	NSBitmapImageRep* rep = [[NSBitmapImageRep alloc]
@@ -205,7 +208,7 @@ bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* previewIn)
 	@autoreleasepool
 	{
 		const bool hasPreview = previewIn != NULL && previewIn->pixels != NULL;
-		const CGFloat kControlsHeight = 268;
+		const CGFloat kControlsHeight = 300;
 		const CGFloat kPreviewHeight = hasPreview ? 300 : 0;
 
 		NSWindow* window = [[NSWindow alloc]
@@ -237,22 +240,22 @@ bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* previewIn)
 			controller->preview.pixels = NULL;
 		}
 
-		controller->amount = AddSliderRow(content, controller, 224, @"Distortion Amount:",
+		controller->amount = AddSliderRow(content, controller, 256, @"Distortion Amount:",
 			DISTORT_AMOUNT_MIN, DISTORT_AMOUNT_MAX, ioParams->distortAmount);
-		controller->scale = AddSliderRow(content, controller, 192, @"Distortion Scale:",
+		controller->scale = AddSliderRow(content, controller, 224, @"Distortion Scale:",
 			DISTORT_SCALE_MIN, DISTORT_SCALE_MAX, ioParams->distortScale);
-		controller->blur = AddSliderRow(content, controller, 160, @"Blur Radius:",
+		controller->blur = AddSliderRow(content, controller, 192, @"Blur Radius:",
 			BLUR_RADIUS_MIN, BLUR_RADIUS_MAX, ioParams->blurRadius);
-		controller->mosaic = AddSliderRow(content, controller, 128, @"Mosaic Size:",
+		controller->mosaic = AddSliderRow(content, controller, 160, @"Mosaic Size:",
 			MOSAIC_SIZE_MIN, MOSAIC_SIZE_MAX, ioParams->mosaicSize);
 
 		NSTextField* shapeLabel = [NSTextField labelWithString:@"Mosaic Shape:"];
-		shapeLabel.frame = NSMakeRect(16, 94, 150, 20);
+		shapeLabel.frame = NSMakeRect(16, 126, 150, 20);
 		shapeLabel.alignment = NSTextAlignmentRight;
 		[content addSubview:shapeLabel];
 
 		controller->shape = [[NSPopUpButton alloc]
-			initWithFrame:NSMakeRect(174, 90, 150, 26) pullsDown:NO];
+			initWithFrame:NSMakeRect(174, 122, 150, 26) pullsDown:NO];
 		[controller->shape addItemsWithTitles:@[ @"Square", @"Triangle", @"Hexagon" ]];
 		[controller->shape selectItemAtIndex:
 			(ioParams->mosaicShape >= 0 && ioParams->mosaicShape <= 2)
@@ -260,6 +263,15 @@ bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* previewIn)
 		controller->shape.target = controller;
 		controller->shape.action = @selector(controlChanged:);
 		[content addSubview:controller->shape];
+
+		controller->blurAfterMosaic = [NSButton
+			checkboxWithTitle:@"Blur After Mosaic"
+			target:controller action:@selector(controlChanged:)];
+		controller->blurAfterMosaic.frame = NSMakeRect(176, 92, 264, 20);
+		controller->blurAfterMosaic.toolTip = @"Apply blur after mosaic to soften the visible cell edges";
+		controller->blurAfterMosaic.state = ioParams->blurAfterMosaic ? NSControlStateValueOn
+			: NSControlStateValueOff;
+		[content addSubview:controller->blurAfterMosaic];
 
 		controller->blackout = [NSButton
 			checkboxWithTitle:@"Blackout (solid black instead of the layered passes)"

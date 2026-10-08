@@ -194,6 +194,7 @@ public:
 		const float mosaicSize = (float)GetParam(ANON_MOSAIC_SIZE, clipTime).mFloat64 * ds;
 		const double seedParam = GetParam(ANON_SEED, clipTime).mFloat64;
 		const bool jitter = GetParam(ANON_TEMPORAL_JITTER, clipTime).mBool != 0;
+		const bool blurAfterMosaic = GetParam(ANON_BLUR_AFTER_MOSAIC, clipTime).mBool != 0;
 		const bool blackout = GetParam(ANON_BLACKOUT, clipTime).mBool != 0;
 		// Unlike the AE-style CPU side (u.pd.value, 1-based), the video
 		// segment suite delivers popup values 0-based.
@@ -296,21 +297,29 @@ public:
 		params.mDstPitch = width;
 		Dispatch(encoder, mPipelines[kKernelDistort], srcBuffer, tmpA, params);
 
-		// Layer 2: separable Gaussian blur, tmpA -> tmpB -> tmpA
-		if (blurRadiusInt >= 1)
-		{
-			params.mSrcPitch = width;
-			params.mDstPitch = width;
-			params.mBlurDir = 0;
-			Dispatch(encoder, mPipelines[kKernelBlur], tmpA, tmpB, params);
-			params.mBlurDir = 1;
-			Dispatch(encoder, mPipelines[kKernelBlur], tmpB, tmpA, params);
-		}
-
-		// Layer 3: mosaic, tmpA -> output frame
 		params.mSrcPitch = width;
-		params.mDstPitch = dstPitch;
-		Dispatch(encoder, mPipelines[kKernelMosaic], tmpA, dstBuffer, params);
+		params.mDstPitch = width;
+		if (blurAfterMosaic && blurRadiusInt >= 1)
+		{
+			Dispatch(encoder, mPipelines[kKernelMosaic], tmpA, tmpB, params);
+			params.mBlurDir = 0;
+			Dispatch(encoder, mPipelines[kKernelBlur], tmpB, tmpA, params);
+			params.mBlurDir = 1;
+			params.mDstPitch = dstPitch;
+			Dispatch(encoder, mPipelines[kKernelBlur], tmpA, dstBuffer, params);
+		}
+		else
+		{
+			if (blurRadiusInt >= 1)
+			{
+				params.mBlurDir = 0;
+				Dispatch(encoder, mPipelines[kKernelBlur], tmpA, tmpB, params);
+				params.mBlurDir = 1;
+				Dispatch(encoder, mPipelines[kKernelBlur], tmpB, tmpA, params);
+			}
+			params.mDstPitch = dstPitch;
+			Dispatch(encoder, mPipelines[kKernelMosaic], tmpA, dstBuffer, params);
+		}
 
 		[encoder endEncoding];
 		[commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> cb) {

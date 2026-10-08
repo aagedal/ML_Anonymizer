@@ -100,6 +100,10 @@ PF_Err ParamsSetup(
 		"Square|Triangle|Hexagon",
 		ANON_MOSAIC_SHAPE);
 
+	AEFX_CLR_STRUCT(def);
+	PF_ADD_CHECKBOXX("Blur After Mosaic",
+		FALSE, 0, ANON_BLUR_AFTER_MOSAIC);
+
 	out_data->num_params = ANON_NUM_PARAMS;
 	return PF_Err_NONE;
 }
@@ -198,9 +202,9 @@ PF_Err Render(
 		}
 	}
 
-	// Layer 1: random distortion, Layer 2: separable Gaussian blur,
-	// Layer 3: mosaic. Result lands back in bufA.
-	RunLayeredPasses(bufA.data(), bufB.data(), w, h, amount, scale, blurRadius, mosaicSize, mosaicShape, seed);
+	// Distortion followed by blur/mosaic in the selected order. Result in bufA.
+	RunLayeredPasses(bufA.data(), bufB.data(), w, h, amount, scale, blurRadius, mosaicSize, mosaicShape, seed,
+		params[ANON_BLUR_AFTER_MOSAIC]->u.bd.value != 0);
 
 	// Store to the output world.
 	if (isFloatWorld)

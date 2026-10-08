@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 # VERSION is the single source of truth — bump here only.
-project(PremiereAnonymizer VERSION 1.5.0 LANGUAGES CXX OBJCXX)
+project(PremiereAnonymizer VERSION 1.6.0 LANGUAGES CXX OBJCXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -170,6 +170,8 @@ target_compile_definitions(AnonymizerOFX PRIVATE
 	ANON_EFFECT_NAME="${ANON_EFFECT_NAME}"
 	ANON_CATEGORY="${ANON_CATEGORY}"
 	ANON_OFX_PLUGIN_ID="${ANON_OFX_PLUGIN_ID}"
+	MAJOR_VERSION=${PROJECT_VERSION_MAJOR}
+	MINOR_VERSION=${PROJECT_VERSION_MINOR}
 )
 
 set_target_properties(AnonymizerOFX PROPERTIES
@@ -331,4 +333,23 @@ if(EXISTS "${PS_SDK_PATH}/photoshopapi/photoshop/PIFilter.h")
 	)
 else()
 	message(STATUS "Photoshop SDK not found - skipping the Photoshop plugin")
+endif()
+
+# Regression coverage for the shared pipeline and the packed Metal adapter.
+include(CTest)
+if(BUILD_TESTING)
+	add_executable(AnonymizerAlgoTests tests/LayeredPasses.cpp)
+	target_include_directories(AnonymizerAlgoTests PRIVATE shared)
+	add_test(NAME LayeredPassesCPU COMMAND AnonymizerAlgoTests)
+	if(TARGET AnonymizerPS)
+		add_executable(AnonymizerMetalTests tests/LayeredPasses.cpp ps/AnonymizerPSMetal.mm)
+		target_include_directories(AnonymizerMetalTests PRIVATE
+			shared ps
+			"${PS_SDK_PATH}/photoshopapi/photoshop"
+			"${PS_SDK_PATH}/photoshopapi/pica_sp"
+			"${PS_SDK_PATH}/samplecode/common/includes")
+		target_compile_definitions(AnonymizerMetalTests PRIVATE ANON_TEST_METAL)
+		target_link_libraries(AnonymizerMetalTests PRIVATE "-framework Metal" "-framework Foundation")
+		add_test(NAME LayeredPassesMetal COMMAND AnonymizerMetalTests)
+	endif()
 endif()

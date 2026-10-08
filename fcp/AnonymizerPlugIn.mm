@@ -25,6 +25,7 @@ enum
 	kParamID_TemporalJitter = 6,
 	kParamID_Blackout = 7,
 	kParamID_MosaicShape = 8,
+	kParamID_BlurAfterMosaic = 9,
 };
 
 typedef struct
@@ -36,6 +37,7 @@ typedef struct
 	uint32_t seed;
 	int32_t blackout;
 	int32_t mosaicShape;
+	int32_t blurAfterMosaic;
 } AnonFxState;
 
 /*
@@ -159,6 +161,11 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	                              menuEntries:@[@"Square", @"Triangle", @"Hexagon"]
 	                           parameterFlags:kFxParameterFlag_DEFAULT];
 
+	ok = ok && [paramAPI addToggleButtonWithName:@"Blur After Mosaic"
+	                                 parameterID:kParamID_BlurAfterMosaic
+	                                defaultValue:NO
+	                              parameterFlags:kFxParameterFlag_DEFAULT];
+
 	if (!ok && error != NULL)
 		*error = [NSError errorWithDomain:FxPlugErrorDomain
 		                             code:kFxError_InvalidParameter
@@ -187,6 +194,7 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	AnonFxState state = {};
 	BOOL jitterState = YES;
 	BOOL blackoutState = NO;
+	BOOL blurAfterMosaicState = NO;
 	int seedValue = 0;
 	[paramAPI getFloatValue:&state.distortAmount fromParameter:kParamID_DistortAmount atTime:renderTime];
 	[paramAPI getFloatValue:&state.distortScale fromParameter:kParamID_DistortScale atTime:renderTime];
@@ -196,6 +204,8 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	[paramAPI getBoolValue:&jitterState fromParameter:kParamID_TemporalJitter atTime:renderTime];
 	[paramAPI getBoolValue:&blackoutState fromParameter:kParamID_Blackout atTime:renderTime];
 	state.blackout = blackoutState ? 1 : 0;
+	[paramAPI getBoolValue:&blurAfterMosaicState fromParameter:kParamID_BlurAfterMosaic atTime:renderTime];
+	state.blurAfterMosaic = blurAfterMosaicState ? 1 : 0;
 	int shapeValue = 0;
 	[paramAPI getIntValue:&shapeValue fromParameter:kParamID_MosaicShape atTime:renderTime];
 	state.mosaicShape = (shapeValue >= 0 && shapeValue <= 2) ? shapeValue : 0;
@@ -366,14 +376,25 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	else
 	{
 		dispatchPass(cache.psoDistort, bufSrc, bufA);
-		if (params.mBlurRadius >= 1)
+		if (state.blurAfterMosaic && params.mBlurRadius >= 1)
 		{
+			dispatchPass(cache.psoMosaic, bufA, bufB);
 			params.mBlurDir = 0;
-			dispatchPass(cache.psoBlur, bufA, bufB);
-			params.mBlurDir = 1;
 			dispatchPass(cache.psoBlur, bufB, bufA);
+			params.mBlurDir = 1;
+			dispatchPass(cache.psoBlur, bufA, bufB);
 		}
-		dispatchPass(cache.psoMosaic, bufA, bufB);
+		else
+		{
+			if (params.mBlurRadius >= 1)
+			{
+				params.mBlurDir = 0;
+				dispatchPass(cache.psoBlur, bufA, bufB);
+				params.mBlurDir = 1;
+				dispatchPass(cache.psoBlur, bufB, bufA);
+			}
+			dispatchPass(cache.psoMosaic, bufA, bufB);
+		}
 	}
 	[compute endEncoding];
 

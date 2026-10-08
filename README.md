@@ -23,9 +23,9 @@ effect:
 
 **Why multiple layers?** A plain blur is a (roughly) invertible convolution, and
 plain mosaic averages are increasingly recoverable with ML reconstruction. Here,
-each mosaic block averages content that was *already* blurred and *already*
-displaced by an unpublished random amount, so there is no clean inverse — an
-attacker would have to jointly undo three lossy, keyed transforms.
+each mosaic cell samples the center of content that has been distorted; blur
+can run before or after this sampling. These lossy operations remove detail,
+but they do not guarantee that identifying information is unrecoverable.
 
 ## Effect parameters
 
@@ -36,12 +36,17 @@ attacker would have to jointly undo three lossy, keyed transforms.
 | Blur Radius | 15 | Gaussian radius (sigma = radius/2) |
 | Mosaic Block Size | 25 | Pixelation block size |
 | Mosaic Shape | Square | Square, Triangle, or Hexagon tiling |
+| Blur After Mosaic | Off | Runs distortion → mosaic → blur to soften visible cell edges |
 | Random Seed | 0 | Change for a different distortion pattern |
 | Temporal Jitter | On | New distortion pattern every frame |
 | Blackout | Off | Solid black instead of the distort/blur/mosaic stack (source alpha preserved) |
 
+Enable **Blur After Mosaic** for a softer appearance with less visible tiling.
+Increase Blur Radius if cell edges remain obvious. The default order stays
+distortion → blur → mosaic; with a zero blur radius, both orders match.
+
 Pixel-space parameters are specified **at a 1080p reference** and scale with
-the rendered frame height, so the anonymization strength is identical at
+the shorter frame dimension, so the anonymization strength is identical at
 1080p, 4K, or 8K — and proxy/preview renders match the full-resolution
 output automatically.
 
@@ -212,7 +217,7 @@ the build directory as their first argument (default `build`).
 
 ## How it works
 
-The algorithm lives in `shared/` and is compiled into all three host plugins:
+The algorithm lives in `shared/` and is compiled into all four host plugins:
 
 - `shared/AnonymizerAlgo.h` — the CPU passes, noise/hash functions, and the
   parameter ranges/defaults, host-independent.
@@ -225,7 +230,8 @@ The algorithm lives in `shared/` and is compiled into all three host plugins:
 with a Premiere GPU filter (`xGPUFilterEntry`) in the same binary — the
 pattern used by Adobe's `SDK_ProcAmp` sample; Premiere binds the GPU filter to
 the effect through the PiPL. Per frame the GPU path encodes four compute
-dispatches with no CPU readbacks: `distort → blur H → blur V → mosaic`,
+dispatches with no CPU readbacks: `distort → blur H → blur V → mosaic` (or
+`distort → mosaic → blur H → blur V` with Blur After Mosaic),
 ping-ponging through two temp buffers allocated per render and released by
 the command buffer's completion handler (renders overlap and vary in size,
 so instance-cached buffers would race).
@@ -272,3 +278,17 @@ The CPU path is already portable. For GPU on Windows, add CUDA/DirectX
 variants of the kernels (see Adobe's `SDK_ProcAmp` sample for the CUDA
 scaffolding) and a `.rc`/`PiPLtool` step for the PiPL; `Anonymizer_GPU.mm`
 would split into a shared host file plus per-API dispatch.
+
+## Regression checks
+
+After configuring with the SDK paths above, build and run the checks with:
+
+```sh
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+The CPU checks cover both processing orders, all mosaic shapes, zero and
+fractional blur radii, and small or odd frame sizes. When the Photoshop SDK is
+available, the Metal checks also compare GPU output with the CPU reference;
+these require access to a Metal device. Set `-DBUILD_TESTING=OFF` to omit tests.

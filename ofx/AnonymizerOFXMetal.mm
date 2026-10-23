@@ -20,6 +20,7 @@
 #include "AnonymizerKernel.h"
 #include "AnonymizerAlgo.h"
 
+// Must match AnonRenderSettings in AnonymizerOFX.cpp.
 struct AnonRenderSettings
 {
 	float distortAmount;
@@ -30,30 +31,9 @@ struct AnonRenderSettings
 	bool blackout;
 	int mosaicShape;
 	bool blurAfterMosaic;
+	float desaturate; // 0..1
 };
 
-/*
-** Mirrors struct AnonParams in AnonymizerKernel.h (all 32-bit fields).
-** Must stay byte-for-byte in sync with that struct.
-*/
-typedef struct
-{
-	int mSrcPitch;
-	int mDstPitch;
-	int m16f;
-	int mWidth;
-	int mHeight;
-	int mBlurRadius;
-	int mBlurDir;
-	int mMosaicShape;
-	float mDistortAmount;
-	float mDistortScale;
-	float mBlurSigma;
-	float mMosaicSize;
-	uint32_t mSeed;
-	float mDistortBiasDx;
-	float mDistortBiasDy;
-} AnonParamsHost;
 
 enum { kKernelDistort = 0, kKernelBlur, kKernelMosaic, kKernelBlackout, kKernelCount };
 static const char* const kKernelNames[kKernelCount] = { "AnonDistort", "AnonBlur", "AnonMosaic", "AnonBlackout" };
@@ -154,20 +134,10 @@ void RunMetalAnonymizer(void* p_CmdQ, int p_Width, int p_Height,
 	id<MTLBuffer> srcBuffer = reinterpret_cast<id<MTLBuffer>>(const_cast<float*>(p_Input));
 	id<MTLBuffer> dstBuffer = reinterpret_cast<id<MTLBuffer>>(p_Output);
 
-	// Sparse-grid mean bias — same approach as the Premiere GPU path.
-	const float invScaleBias = 1.0f / std::max(p_Settings.distortScale, 2.0f);
-	const int kBiasStep = std::max(1, std::max(p_Width, p_Height) / 64);
-	float sumBiasDx = 0.0f, sumBiasDy = 0.0f;
-	int biasSamples = 0;
-	for (int sy = kBiasStep / 2; sy < p_Height; sy += kBiasStep) {
-		for (int sx = kBiasStep / 2; sx < p_Width; sx += kBiasStep) {
-			sumBiasDx += AnonAlgo::VNoise((float)sx * invScaleBias, (float)sy * invScaleBias, p_Settings.seed, 0u);
-			sumBiasDy += AnonAlgo::VNoise((float)sx * invScaleBias, (float)sy * invScaleBias, p_Settings.seed, 1u);
-			++biasSamples;
-		}
-	}
-	const float distortBiasDx = biasSamples > 0 ? (sumBiasDx / (float)biasSamples) * 2.0f - 1.0f : 0.0f;
-	const float distortBiasDy = biasSamples > 0 ? (sumBiasDy / (float)biasSamples) * 2.0f - 1.0f : 0.0f;
+	// Zero-mean the displacement field (see AnonAlgo::DisplacementBias).
+	float distortBiasDx = 0.0f, distortBiasDy = 0.0f;
+	AnonAlgo::DisplacementBias(p_Width, p_Height, p_Settings.distortScale, p_Settings.seed,
+		&distortBiasDx, &distortBiasDy);
 
 	AnonParamsHost params = {};
 	params.mSrcPitch = p_Width;
@@ -184,6 +154,8 @@ void RunMetalAnonymizer(void* p_CmdQ, int p_Width, int p_Height,
 	params.mSeed = p_Settings.seed;
 	params.mDistortBiasDx = distortBiasDx;
 	params.mDistortBiasDy = distortBiasDy;
+	params.mDesaturate = p_Settings.desaturate;
+	params.mChannelOrder = ANON_ORDER_RGBA;
 
 	id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
 	commandBuffer.label = @"MultiLayerAnonymizer";

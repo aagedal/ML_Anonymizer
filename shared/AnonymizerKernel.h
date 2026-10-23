@@ -5,11 +5,15 @@
 ** newLibraryWithSource (same approach as Adobe's SDK_ProcAmp GPU sample).
 **
 ** The noise / sampling functions mirror the CPU implementations in
-** Anonymizer_CPU.cpp - keep the two in sync so software and GPU renders
+** AnonymizerAlgo.h - keep the two in sync so software and GPU renders
 ** are interchangeable.
 **
-** Frames are BGRA buffers, float4 (32f) or half4 (16f) per pixel, selected
-** by params.is16f at runtime.
+** Frames are 4-channel buffers, float4 (32f) or half4 (16f) per pixel,
+** selected by params.is16f at runtime. Channel order only matters for
+** desaturation (params.channelOrder, ANON_ORDER_* in AnonymizerAlgo.h).
+**
+** The host side of struct AnonParams is AnonParamsHost below - every host
+** uses that one definition, so the layouts cannot drift apart.
 */
 
 #ifndef ANONYMIZER_KERNEL_H
@@ -36,6 +40,8 @@ struct AnonParams
 	uint seed;
 	float distortBiasDx;
 	float distortBiasDy;
+	float desaturate;   // 0..1, applied in the final (mosaic) pass
+	int channelOrder;   // 0 RGBA, 1 BGRA, 2 ARGB
 };
 
 inline float4 LoadPix(device const uchar* buf, int pitch, int x, int y, int is16f)
@@ -117,6 +123,20 @@ inline float VNoise(float px, float py, uint seed, uint channel)
 	return ab + (cd - ab) * ty;
 }
 
+// Two-octave displacement field, mirrored from AnonAlgo::Displacement.
+inline float2 AnonDisplacement(float x, float y, float invScale, uint seed)
+{
+	float px = x * invScale;
+	float py = y * invScale;
+	float qx = (px * 0.8f - py * 0.6f) * 2.7f;
+	float qy = (px * 0.6f + py * 0.8f) * 2.7f;
+	float n0 = VNoise(px, py, seed, 0u) * 2.0f - 1.0f;
+	float n1 = VNoise(px, py, seed, 1u) * 2.0f - 1.0f;
+	float n2 = VNoise(qx, qy, seed, 2u) * 2.0f - 1.0f;
+	float n3 = VNoise(qx, qy, seed, 3u) * 2.0f - 1.0f;
+	return float2((n0 + n2 * 0.5f) * 0.6666667f, (n1 + n3 * 0.5f) * 0.6666667f);
+}
+
 // ---- Layer 1: random spatial distortion ----
 
 kernel void AnonDistort(
@@ -137,10 +157,9 @@ kernel void AnonDistort(
 	else
 	{
 		float invScale = 1.0f / max(p.distortScale, 2.0f);
-		float nx = VNoise(float(x) * invScale, float(y) * invScale, p.seed, 0u);
-		float ny = VNoise(float(x) * invScale, float(y) * invScale, p.seed, 1u);
-		float dx = ((nx * 2.0f - 1.0f) - p.distortBiasDx) * p.distortAmount;
-		float dy = ((ny * 2.0f - 1.0f) - p.distortBiasDy) * p.distortAmount;
+		float2 n = AnonDisplacement(float(x), float(y), invScale, p.seed);
+		float dx = (n.x - p.distortBiasDx) * p.distortAmount;
+		float dy = (n.y - p.distortBiasDy) * p.distortAmount;
 		c = SampleBilinear(src, p.srcPitch, p.width, p.height, p.is16f,
 			float2(float(x) + dx, float(y) + dy));
 	}
@@ -258,6 +277,20 @@ inline float2 MosaicCellCenter(float x, float y, float b, int shape)
 	return float2(hz * hy, vy * rz);
 }
 
+// Mirrored from AnonAlgo::LumaWeights / DesaturatePass.
+inline float4 AnonDesaturate(float4 c, float amount, int channelOrder)
+{
+	float4 w;
+	int alpha;
+	if (channelOrder == 1)      { w = float4(0.0722f, 0.7152f, 0.2126f, 0.0f); alpha = 3; }
+	else if (channelOrder == 2) { w = float4(0.0f, 0.2126f, 0.7152f, 0.0722f); alpha = 0; }
+	else                        { w = float4(0.2126f, 0.7152f, 0.0722f, 0.0f); alpha = 3; }
+	float luma = c.x * w.x + c.y * w.y + c.z * w.z + c.w * w.w;
+	float4 r = c + (float4(luma) - c) * amount;
+	r[alpha] = c[alpha];
+	return r;
+}
+
 kernel void AnonMosaic(
 	device const uchar* src [[buffer(0)]],
 	device uchar* dst [[buffer(1)]],
@@ -281,8 +314,38 @@ kernel void AnonMosaic(
 		sx = clamp(int(RoundHalfUp(c.x)), 0, p.width - 1);
 		sy = clamp(int(RoundHalfUp(c.y)), 0, p.height - 1);
 	}
-	StorePix(dst, p.dstPitch, x, y, p.is16f, LoadPix(src, p.srcPitch, sx, sy, p.is16f));
+	float4 c = LoadPix(src, p.srcPitch, sx, sy, p.is16f);
+	if (p.desaturate > 0.0f)
+		c = AnonDesaturate(c, min(p.desaturate, 1.0f), p.channelOrder);
+	StorePix(dst, p.dstPitch, x, y, p.is16f, c);
 }
 )MSLSRC";
+
+/*
+** Host-side mirror of struct AnonParams above (all 32-bit fields, same
+** order). Shared by every Metal host so the two cannot drift apart.
+*/
+#include <stdint.h>
+
+typedef struct
+{
+	int mSrcPitch;
+	int mDstPitch;
+	int m16f;
+	int mWidth;
+	int mHeight;
+	int mBlurRadius;
+	int mBlurDir;
+	int mMosaicShape;
+	float mDistortAmount;
+	float mDistortScale;
+	float mBlurSigma;
+	float mMosaicSize;
+	uint32_t mSeed;
+	float mDistortBiasDx;
+	float mDistortBiasDy;
+	float mDesaturate;
+	int mChannelOrder;
+} AnonParamsHost;
 
 #endif // ANONYMIZER_KERNEL_H

@@ -21,7 +21,9 @@
 
 /*
 ** Persisted in the host-owned parameters handle, so "Last Filter" (Cmd-F)
-** reruns with the previous values. Fixed-size scalar fields only.
+** reruns with the previous values. Fixed-size scalar fields only; new
+** fields go at the end (older, shorter handles are grown and the new
+** fields defaulted - see EnsureParametersHandle).
 */
 typedef struct PSParameters
 {
@@ -32,6 +34,7 @@ typedef struct PSParameters
 	int32 mosaicShape; /* ANON_SHAPE_* */
 	Boolean blackout;
 	int32 blurAfterMosaic;
+	double desaturate; /* 0..100 */
 } PSParameters;
 
 /*
@@ -47,6 +50,7 @@ typedef struct PSPreviewContext
 	int height;
 	float ds;
 	int colorPlanes;
+	uint32_t seed; /* the same seed the full-resolution render will use */
 } PSPreviewContext;
 
 /*
@@ -65,6 +69,6 @@ void DoAboutDialog(void);
 */
 bool RunMetalPasses(float* buf, int w, int h,
 	float amount, float scale, float blurRadius, float mosaicSize,
-	int mosaicShape, uint32_t seed, bool blurAfterMosaic);
+	int mosaicShape, uint32_t seed, bool blurAfterMosaic, float desaturate);
 
 #endif

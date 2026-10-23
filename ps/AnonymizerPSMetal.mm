@@ -19,29 +19,6 @@
 #include <algorithm>
 #include <string.h>
 
-/*
-** Mirrors struct AnonParams in AnonymizerKernel.h (all 32-bit fields).
-** Must stay byte-for-byte in sync with that struct.
-*/
-typedef struct
-{
-	int mSrcPitch;
-	int mDstPitch;
-	int m16f;
-	int mWidth;
-	int mHeight;
-	int mBlurRadius;
-	int mBlurDir;
-	int mMosaicShape;
-	float mDistortAmount;
-	float mDistortScale;
-	float mBlurSigma;
-	float mMosaicSize;
-	uint32_t mSeed;
-	float mDistortBiasDx;
-	float mDistortBiasDy;
-} AnonParamsHost;
-
 enum { kKernelDistort = 0, kKernelBlur, kKernelMosaic, kKernelCount };
 static const char* const kKernelNames[kKernelCount] =
 	{ "AnonDistort", "AnonBlur", "AnonMosaic" };
@@ -110,7 +87,7 @@ static void DispatchPass(
 
 bool RunMetalPasses(float* buf, int w, int h,
 	float amount, float scale, float blurRadius, float mosaicSize,
-	int mosaicShape, uint32_t seed, bool blurAfterMosaic)
+	int mosaicShape, uint32_t seed, bool blurAfterMosaic, float desaturate)
 {
 	@autoreleasepool
 	{
@@ -129,19 +106,6 @@ bool RunMetalPasses(float* buf, int w, int h,
 		if (src == nil || dst == nil || tmpA == nil || tmpB == nil)
 			return false;
 
-		/* Sparse-grid mean bias - same approach as the other GPU hosts. */
-		const float invScaleBias = 1.0f / std::max(scale, 2.0f);
-		const int kBiasStep = std::max(1, std::max(w, h) / 64);
-		float sumBiasDx = 0.0f, sumBiasDy = 0.0f;
-		int biasSamples = 0;
-		for (int sy = kBiasStep / 2; sy < h; sy += kBiasStep) {
-			for (int sx = kBiasStep / 2; sx < w; sx += kBiasStep) {
-				sumBiasDx += AnonAlgo::VNoise((float)sx * invScaleBias, (float)sy * invScaleBias, seed, 0u);
-				sumBiasDy += AnonAlgo::VNoise((float)sx * invScaleBias, (float)sy * invScaleBias, seed, 1u);
-				++biasSamples;
-			}
-		}
-
 		AnonParamsHost params = {};
 		params.mSrcPitch = w;
 		params.mDstPitch = w;
@@ -155,10 +119,10 @@ bool RunMetalPasses(float* buf, int w, int h,
 		params.mMosaicSize = mosaicSize;
 		params.mMosaicShape = mosaicShape;
 		params.mSeed = seed;
-		params.mDistortBiasDx = biasSamples > 0
-			? (sumBiasDx / (float)biasSamples) * 2.0f - 1.0f : 0.0f;
-		params.mDistortBiasDy = biasSamples > 0
-			? (sumBiasDy / (float)biasSamples) * 2.0f - 1.0f : 0.0f;
+		AnonAlgo::DisplacementBias(w, h, scale, seed,
+			&params.mDistortBiasDx, &params.mDistortBiasDy);
+		params.mDesaturate = desaturate;
+		params.mChannelOrder = ANON_ORDER_RGBA;
 
 		id<MTLCommandBuffer> commandBuffer = [sQueue commandBuffer];
 		commandBuffer.label = @"MultiLayerAnonymizerPS";

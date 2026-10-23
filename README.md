@@ -6,9 +6,10 @@ A native, Metal-accelerated anonymization effect for **Adobe Premiere Pro**,
 image regions by stacking three independent obfuscation layers in a single
 effect:
 
-1. **Random spatial distortion** — value-noise displacement warps the image by
-   a pseudo-random field, destroying the pixel-to-pixel correspondence that
-   deblurring and mosaic-reversal tools rely on.
+1. **Random spatial distortion** — two octaves of value noise (a base octave
+   plus a finer one on a rotated lattice) warp the image by a pseudo-random
+   field, destroying the pixel-to-pixel correspondence that deblurring and
+   mosaic-reversal tools rely on.
 2. **Gaussian blur** — removes the high-frequency detail.
 3. **Mosaic** — pixelates the result, with a square, triangle, or hexagon
    tiling (a purely cosmetic choice — all three sample the same way).
@@ -37,9 +38,12 @@ but they do not guarantee that identifying information is unrecoverable.
 | Mosaic Block Size | 25 | Pixelation block size |
 | Mosaic Shape | Square | Square, Triangle, or Hexagon tiling |
 | Blur After Mosaic | Off | Runs distortion → mosaic → blur to soften visible cell edges |
-| Random Seed | 0 | Change for a different distortion pattern |
+| Random Seed | 0 | Change for a different distortion pattern (0–16,777,215) |
+| Randomize Seed | — | Button: picks a new random seed |
+| Session Key | On | Mixes in an unrecorded random key that changes every time the app launches |
 | Temporal Jitter | On | New distortion pattern every frame |
 | Blackout | Off | Solid black instead of the distort/blur/mosaic stack (source alpha preserved) |
+| Desaturate | 0 % | Removes colour (Rec. 709 luma), e.g. to hide skin tone or clothing colour |
 
 Enable **Blur After Mosaic** for a softer appearance with less visible tiling.
 Enabling it raises Blur Radius from the default 15 to 35; customized values are
@@ -56,6 +60,17 @@ output automatically.
 Blackout is the zero-information option: nothing of the covered pixels
 survives, so use it (with an effect mask) when the region must be provably
 unrecoverable and aesthetics don't matter.
+
+Session Key: the seed is saved in the project, so anyone with the project
+file (and this open-source algorithm) could regenerate the exact warp. With
+Session Key on, a random key from the system CSPRNG is mixed in. It is drawn
+once per app launch and never written anywhere, so the warp cannot be
+reproduced, even from the project file. The cost is that renders made in
+different sessions get different patterns. With Temporal Jitter on that is
+invisible (the pattern changes every frame anyway). With jitter off, the
+static pattern changes between launches, and separate render processes
+(e.g. Media Encoder) differ from the preview. Turn it off when renders must
+be bit-identical across sessions.
 
 Temporal Jitter trade-off: **on** prevents an attacker from treating the warp as
 a fixed transform across frames (and looks "alive"); **off** gives a static
@@ -172,7 +187,8 @@ Multi-Layer Anonymizer…** and works on RGB and Grayscale documents at 8, 16,
 and 32 bits per channel, respecting selections. Parameter values carry the
 same 1080p-reference semantics as the video hosts, scaled by the document's
 shorter dimension. The filter is not yet recordable with parameters in
-Actions (it reruns with its last-used values instead).
+Actions (it reruns with its last-used values instead). Every run uses a fresh
+random seed; the dialog preview shows the same seed the final render uses.
 
 A ready-made action (`ps/actions/`) is bundled: it duplicates the current
 layer as a smart object, applies the anonymizer as a smart filter, adds an
@@ -249,9 +265,10 @@ wrapper app, following Apple's Xcode template. The host provides
 IOSurface-backed textures, bridged to the shared buffer kernels by a small
 copy-in compute kernel and a fullscreen-quad output pass.
 
-`Random Seed`, frame number, and `Temporal Jitter` feed the identical 32-bit
-seed derivation on every path, so all hosts, GPU and CPU, produce the same
-anonymization for the same settings.
+`Random Seed`, frame number, `Temporal Jitter`, and the optional session key
+feed the identical 32-bit seed derivation on every path, so all hosts, GPU
+and CPU, produce the same anonymization for the same settings (with Session
+Key off).
 
 ## Anonymization notes (honest caveats)
 
@@ -264,8 +281,10 @@ anonymization for the same settings.
 - Export the anonymized render and share only that. Project files reference
   the original media.
 - The warp is keyed by the seed but the algorithm is public; protection comes
-  from the information destroyed by blur + mosaic after displacement, not from
-  seed secrecy.
+  mainly from the information destroyed by blur + mosaic after displacement.
+  The session key removes the one shortcut that remains (regenerating the
+  exact warp from a leaked project file), but it is not a substitute for
+  generous settings.
 
 ## License
 

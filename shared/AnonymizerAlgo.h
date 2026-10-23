@@ -50,6 +50,12 @@
 #define DESATURATE_MAX       100.0
 #define DESATURATE_DFLT      0.0
 
+/* Per-cell brightness offset, in percent of full range (max +/-). Small
+** values already break exact block-colour matching (Depix-style attacks). */
+#define CELL_NOISE_MIN       0.0
+#define CELL_NOISE_MAX       25.0
+#define CELL_NOISE_DFLT      3.0
+
 /*
 ** Pixel-space parameters are specified at a 1080p reference and scaled by
 ** the shorter frame dimension, so the anonymization strength is independent
@@ -395,7 +401,18 @@ inline void MosaicCellCenter(float x, float y, float b, int shape, float* outX, 
 	}
 }
 
-inline void MosaicPass(const float* src, float* dst, int w, int h, float blockSize, int shape)
+// Seeded brightness offset for the mosaic cell sampled at (sx, sy), in
+// [-amount, amount]. Keep in sync with AnonCellOffset in the MSL.
+inline float CellOffset(int sx, int sy, uint32_t seed, float amount)
+{
+	return (Rand01(sx, sy, seed, 7u) * 2.0f - 1.0f) * amount;
+}
+
+// cellNoise (0..1 of full range) shifts each cell's colour channels by one
+// seeded offset, floored at 0, so cell values no longer equal the averaged
+// source colours. alpha is left untouched.
+inline void MosaicPass(const float* src, float* dst, int w, int h, float blockSize, int shape,
+	uint32_t seed = 0u, float cellNoise = 0.0f, int channelOrder = ANON_ORDER_RGBA)
 {
 	int b = std::max(1, (int)(blockSize + 0.5f));
 	if (b <= 1)
@@ -403,6 +420,7 @@ inline void MosaicPass(const float* src, float* dst, int w, int h, float blockSi
 		memcpy(dst, src, (size_t)w * h * 4 * sizeof(float));
 		return;
 	}
+	const int alpha = channelOrder == ANON_ORDER_ARGB ? 0 : 3;
 	for (int y = 0; y < h; ++y)
 	{
 		float* out = dst + (size_t)y * w * 4;
@@ -427,6 +445,13 @@ inline void MosaicPass(const float* src, float* dst, int w, int h, float blockSi
 			out[1] = p[1];
 			out[2] = p[2];
 			out[3] = p[3];
+			if (cellNoise > 0.0f)
+			{
+				const float o = CellOffset(sx, sy, seed, cellNoise);
+				for (int c = 0; c < 4; ++c)
+					if (c != alpha)
+						out[c] = std::max(out[c] + o, 0.0f);
+			}
 		}
 	}
 }
@@ -465,17 +490,17 @@ inline void DesaturatePass(float* buf, int w, int h, float amount, int channelOr
 }
 
 // Runs the full stack in place on a packed float buffer, using the caller's
-// scratch buffer of the same size. Result lands in `buf`. desaturate is
-// 0..1; channelOrder only matters when it is non-zero.
+// scratch buffer of the same size. Result lands in `buf`. desaturate and
+// cellNoise are 0..1; channelOrder only matters when either is non-zero.
 inline void RunLayeredPasses(float* buf, float* scratch, int w, int h,
 	float amount, float scale, float blurRadius, float mosaicSize, int mosaicShape,
 	uint32_t seed, bool blurAfterMosaic = false, float desaturate = 0.0f,
-	int channelOrder = ANON_ORDER_RGBA)
+	int channelOrder = ANON_ORDER_RGBA, float cellNoise = 0.0f)
 {
 	DistortPass(buf, scratch, w, h, amount, scale, seed);
 	if (blurAfterMosaic)
 	{
-		MosaicPass(scratch, buf, w, h, mosaicSize, mosaicShape);
+		MosaicPass(scratch, buf, w, h, mosaicSize, mosaicShape, seed, cellNoise, channelOrder);
 		BlurPass(buf, scratch, w, h, blurRadius, 0);
 		BlurPass(scratch, buf, w, h, blurRadius, 1);
 	}
@@ -483,7 +508,7 @@ inline void RunLayeredPasses(float* buf, float* scratch, int w, int h,
 	{
 		BlurPass(scratch, buf, w, h, blurRadius, 0);
 		BlurPass(buf, scratch, w, h, blurRadius, 1);
-		MosaicPass(scratch, buf, w, h, mosaicSize, mosaicShape);
+		MosaicPass(scratch, buf, w, h, mosaicSize, mosaicShape, seed, cellNoise, channelOrder);
 	}
 	DesaturatePass(buf, w, h, desaturate, channelOrder);
 }

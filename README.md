@@ -12,7 +12,10 @@ effect:
    mosaic-reversal tools rely on.
 2. **Gaussian blur** — removes the high-frequency detail.
 3. **Mosaic** — pixelates the result, with a square, triangle, or hexagon
-   tiling (a purely cosmetic choice — all three sample the same way).
+   tiling (a purely cosmetic choice — all three sample the same way). Each
+   cell then gets a small seeded brightness offset (**Cell Noise**), so cell
+   colours no longer equal the source averages that block-matching
+   depixelation tools such as Depix compare against.
 
 | Before | After (default settings) |
 |---|---|
@@ -37,6 +40,7 @@ but they do not guarantee that identifying information is unrecoverable.
 | Blur Radius | 15 | Gaussian radius (sigma = radius/2) |
 | Mosaic Block Size | 25 | Pixelation block size |
 | Mosaic Shape | Square | Square, Triangle, or Hexagon tiling |
+| Cell Noise | 3 % | Random brightness offset per mosaic cell (up to ±25 % of full range) |
 | Blur After Mosaic | Off | Runs distortion → mosaic → blur to soften visible cell edges |
 | Random Seed | 0 | Change for a different distortion pattern (0–16,777,215) |
 | Randomize Seed | — | Button: picks a new random seed |
@@ -311,6 +315,6 @@ ctest --test-dir build --output-on-failure
 ```
 
 The CPU checks cover both processing orders, all mosaic shapes, zero and
-fractional blur radii, and small or odd frame sizes. When the Photoshop SDK is
+fractional blur radii, desaturation, cell noise, and small or odd frame sizes. When the Photoshop SDK is
 available, the Metal checks also compare GPU output with the CPU reference;
 these require access to a Metal device. Set `-DBUILD_TESTING=OFF` to omit tests.

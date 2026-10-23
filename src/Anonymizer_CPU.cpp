@@ -119,6 +119,13 @@ PF_Err ParamsSetup(
 	PF_ADD_BUTTON("Randomize Seed", "Randomize",
 		0, PF_ParamFlag_SUPERVISE, ANON_RANDOMIZE_SEED);
 
+	AEFX_CLR_STRUCT(def);
+	PF_ADD_FLOAT_SLIDERX("Cell Noise",
+		CELL_NOISE_MIN, CELL_NOISE_MAX,
+		CELL_NOISE_MIN, CELL_NOISE_MAX,
+		CELL_NOISE_DFLT, PF_Precision_TENTHS,
+		PF_ValueDisplayFlag_PERCENT, 0, ANON_CELL_NOISE);
+
 	out_data->num_params = ANON_NUM_PARAMS;
 	return PF_Err_NONE;
 }
@@ -185,6 +192,7 @@ PF_Err Render(
 	uint32_t seed = AnonComputeSeed(seedParam, jitter, frame,
 		sessionKey ? SessionKey() : 0u);
 	const float desaturate = (float)params[ANON_DESATURATE]->u.fs_d.value / 100.0f;
+	const float cellNoise = (float)params[ANON_CELL_NOISE]->u.fs_d.value / 100.0f;
 
 	const bool isFloatWorld = (in_data->appl_id == 'PrMr');
 
@@ -251,7 +259,7 @@ PF_Err Render(
 	// desaturation. Premiere floats are BGRA, AE 8-bit worlds ARGB. Result in bufA.
 	RunLayeredPasses(bufA.data(), bufB.data(), w, h, amount, scale, blurRadius, mosaicSize, mosaicShape, seed,
 		params[ANON_BLUR_AFTER_MOSAIC]->u.bd.value != 0,
-		desaturate, isFloatWorld ? ANON_ORDER_BGRA : ANON_ORDER_ARGB);
+		desaturate, isFloatWorld ? ANON_ORDER_BGRA : ANON_ORDER_ARGB, cellNoise);
 
 	// Store to the output world.
 	if (isFloatWorld)

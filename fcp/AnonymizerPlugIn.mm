@@ -30,6 +30,7 @@ enum
 	kParamID_Desaturate = 10,
 	kParamID_SessionKey = 11,
 	kParamID_RandomizeSeed = 12,
+	kParamID_CellNoise = 13,
 };
 
 typedef struct
@@ -43,6 +44,7 @@ typedef struct
 	int32_t mosaicShape;
 	int32_t blurAfterMosaic;
 	double desaturate; // 0..100
+	double cellNoise; // 0..100
 } AnonFxState;
 
 typedef struct { int width; int height; } AnonCopyParamsHost;
@@ -183,6 +185,16 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	                              menuEntries:@[@"Square", @"Triangle", @"Hexagon"]
 	                           parameterFlags:kFxParameterFlag_DEFAULT];
 
+	ok = ok && [paramAPI addPercentSliderWithName:@"Cell Noise"
+	                                  parameterID:kParamID_CellNoise
+	                                 defaultValue:CELL_NOISE_DFLT / 100.0
+	                                 parameterMin:CELL_NOISE_MIN / 100.0
+	                                 parameterMax:CELL_NOISE_MAX / 100.0
+	                                    sliderMin:CELL_NOISE_MIN / 100.0
+	                                    sliderMax:CELL_NOISE_MAX / 100.0
+	                                        delta:0.001
+	                               parameterFlags:kFxParameterFlag_DEFAULT];
+
 	ok = ok && [paramAPI addToggleButtonWithName:@"Blur After Mosaic"
 	                                 parameterID:kParamID_BlurAfterMosaic
 	                                defaultValue:NO
@@ -256,6 +268,9 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	double desaturate = 0.0;
 	[paramAPI getFloatValue:&desaturate fromParameter:kParamID_Desaturate atTime:renderTime];
 	state.desaturate = desaturate * 100.0;
+	double cellNoise = 0.0;
+	[paramAPI getFloatValue:&cellNoise fromParameter:kParamID_CellNoise atTime:renderTime];
+	state.cellNoise = cellNoise * 100.0;
 	state.blackout = blackoutState ? 1 : 0;
 	[paramAPI getBoolValue:&blurAfterMosaicState fromParameter:kParamID_BlurAfterMosaic atTime:renderTime];
 	state.blurAfterMosaic = blurAfterMosaicState ? 1 : 0;
@@ -398,6 +413,7 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	AnonAlgo::DisplacementBias(width, height, params.mDistortScale, params.mSeed,
 		&params.mDistortBiasDx, &params.mDistortBiasDy);
 	params.mDesaturate = (float)(state.desaturate / 100.0);
+	params.mCellNoise = (float)(state.cellNoise / 100.0);
 	params.mChannelOrder = ANON_ORDER_RGBA; // texture reads are always RGBA
 
 	id<MTLCommandBuffer> commandBuffer = [cache.queue commandBuffer];

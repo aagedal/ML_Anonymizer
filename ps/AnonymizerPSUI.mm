@@ -2,7 +2,7 @@
 ** Multi-Layer Anonymizer - Photoshop filter plugin (Cocoa dialog).
 **
 ** Programmatic modal dialog, no xib: a live preview over four slider rows
-** matching the NLE parameters, a mosaic-shape popup, a desaturate slider
+** matching the NLE parameters, a mosaic-shape popup, cell-noise and desaturate sliders
 ** and a blackout checkbox. The preview reruns the shared pass pipeline on the proxy
 ** buffer on every control change - the proxy is small enough that this is
 ** interactive.
@@ -42,6 +42,7 @@
 	AnonSliderRow* blur;
 	AnonSliderRow* mosaic;
 	AnonSliderRow* desat;
+	AnonSliderRow* cellNoise;
 	NSPopUpButton* shape;
 	NSButton* blackout;
 	NSButton* blurAfterMosaic;
@@ -96,6 +97,7 @@
 	[mosaic setValue:MOSAIC_SIZE_DFLT];
 	[shape selectItemAtIndex:ANON_SHAPE_SQUARE];
 	[desat setValue:DESATURATE_DFLT];
+	[cellNoise setValue:CELL_NOISE_DFLT];
 	blackout.state = NSControlStateValueOff;
 	blurAfterMosaic.state = NSControlStateValueOff;
 	[self refreshPreview];
@@ -112,6 +114,7 @@
 	p.blackout = blackout.state == NSControlStateValueOn;
 	p.blurAfterMosaic = blurAfterMosaic.state == NSControlStateValueOn;
 	p.desaturate = [desat value];
+	p.cellNoise = [cellNoise value];
 	return p;
 }
 
@@ -145,7 +148,7 @@
 			std::max((float)p.mosaicSize * ds, 1.0f),
 			shapeIdx, preview.seed, p.blurAfterMosaic != 0,
 			preview.colorPlanes == 1 ? 0.0f : (float)(p.desaturate / 100.0),
-			ANON_ORDER_RGBA);
+			ANON_ORDER_RGBA, (float)(p.cellNoise / 100.0));
 	}
 
 	NSBitmapImageRep* rep = [[NSBitmapImageRep alloc]
@@ -216,7 +219,7 @@ bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* previewIn)
 	@autoreleasepool
 	{
 		const bool hasPreview = previewIn != NULL && previewIn->pixels != NULL;
-		const CGFloat kControlsHeight = 332;
+		const CGFloat kControlsHeight = 364;
 		const CGFloat kPreviewHeight = hasPreview ? 300 : 0;
 
 		NSWindow* window = [[NSWindow alloc]
@@ -248,22 +251,22 @@ bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* previewIn)
 			controller->preview.pixels = NULL;
 		}
 
-		controller->amount = AddSliderRow(content, controller, 288, @"Distortion Amount:",
+		controller->amount = AddSliderRow(content, controller, 320, @"Distortion Amount:",
 			DISTORT_AMOUNT_MIN, DISTORT_AMOUNT_MAX, ioParams->distortAmount);
-		controller->scale = AddSliderRow(content, controller, 256, @"Distortion Scale:",
+		controller->scale = AddSliderRow(content, controller, 288, @"Distortion Scale:",
 			DISTORT_SCALE_MIN, DISTORT_SCALE_MAX, ioParams->distortScale);
-		controller->blur = AddSliderRow(content, controller, 224, @"Blur Radius:",
+		controller->blur = AddSliderRow(content, controller, 256, @"Blur Radius:",
 			BLUR_RADIUS_MIN, BLUR_RADIUS_MAX, ioParams->blurRadius);
-		controller->mosaic = AddSliderRow(content, controller, 192, @"Mosaic Size:",
+		controller->mosaic = AddSliderRow(content, controller, 224, @"Mosaic Size:",
 			MOSAIC_SIZE_MIN, MOSAIC_SIZE_MAX, ioParams->mosaicSize);
 
 		NSTextField* shapeLabel = [NSTextField labelWithString:@"Mosaic Shape:"];
-		shapeLabel.frame = NSMakeRect(16, 158, 150, 20);
+		shapeLabel.frame = NSMakeRect(16, 190, 150, 20);
 		shapeLabel.alignment = NSTextAlignmentRight;
 		[content addSubview:shapeLabel];
 
 		controller->shape = [[NSPopUpButton alloc]
-			initWithFrame:NSMakeRect(174, 154, 150, 26) pullsDown:NO];
+			initWithFrame:NSMakeRect(174, 186, 150, 26) pullsDown:NO];
 		[controller->shape addItemsWithTitles:@[ @"Square", @"Triangle", @"Hexagon" ]];
 		[controller->shape selectItemAtIndex:
 			(ioParams->mosaicShape >= 0 && ioParams->mosaicShape <= 2)
@@ -272,6 +275,8 @@ bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* previewIn)
 		controller->shape.action = @selector(controlChanged:);
 		[content addSubview:controller->shape];
 
+		controller->cellNoise = AddSliderRow(content, controller, 158, @"Cell Noise (%):",
+			CELL_NOISE_MIN, CELL_NOISE_MAX, ioParams->cellNoise);
 		controller->desat = AddSliderRow(content, controller, 126, @"Desaturate (%):",
 			DESATURATE_MIN, DESATURATE_MAX, ioParams->desaturate);
 

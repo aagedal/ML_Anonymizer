@@ -42,6 +42,7 @@ struct AnonParams
 	float distortBiasDy;
 	float desaturate;   // 0..1, applied in the final (mosaic) pass
 	int channelOrder;   // 0 RGBA, 1 BGRA, 2 ARGB
+	float cellNoise;    // 0..1 per-cell brightness offset (mosaic pass)
 };
 
 inline float4 LoadPix(device const uchar* buf, int pitch, int x, int y, int is16f)
@@ -277,6 +278,12 @@ inline float2 MosaicCellCenter(float x, float y, float b, int shape)
 	return float2(hz * hy, vy * rz);
 }
 
+// Mirrored from AnonAlgo::CellOffset.
+inline float AnonCellOffset(int sx, int sy, uint seed, float amount)
+{
+	return (Rand01(sx, sy, seed, 7u) * 2.0f - 1.0f) * amount;
+}
+
 // Mirrored from AnonAlgo::LumaWeights / DesaturatePass.
 inline float4 AnonDesaturate(float4 c, float amount, int channelOrder)
 {
@@ -315,6 +322,13 @@ kernel void AnonMosaic(
 		sy = clamp(int(RoundHalfUp(c.y)), 0, p.height - 1);
 	}
 	float4 c = LoadPix(src, p.srcPitch, sx, sy, p.is16f);
+	if (p.cellNoise > 0.0f && b > 1)
+	{
+		int alpha = p.channelOrder == 2 ? 0 : 3;
+		float a = c[alpha];
+		c = max(c + AnonCellOffset(sx, sy, p.seed, p.cellNoise), 0.0f);
+		c[alpha] = a;
+	}
 	if (p.desaturate > 0.0f)
 		c = AnonDesaturate(c, min(p.desaturate, 1.0f), p.channelOrder);
 	StorePix(dst, p.dstPitch, x, y, p.is16f, c);
@@ -346,6 +360,7 @@ typedef struct
 	float mDistortBiasDy;
 	float mDesaturate;
 	int mChannelOrder;
+	float mCellNoise;
 } AnonParamsHost;
 
 #endif // ANONYMIZER_KERNEL_H

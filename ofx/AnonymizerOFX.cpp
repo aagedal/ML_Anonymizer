@@ -59,6 +59,7 @@ struct AnonRenderSettings
 	int mosaicShape;
 	bool blurAfterMosaic;
 	float desaturate; // 0..1
+	float cellNoise; // 0..1
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -153,7 +154,8 @@ void AnonymizerProcessor::computeFullCPU()
 	AnonAlgo::RunLayeredPasses(_cpuResult.data(), scratch.data(), w, h,
 		_settings.distortAmount, _settings.distortScale,
 		_settings.blurRadius, _settings.mosaicSize, _settings.mosaicShape,
-		_settings.seed, _settings.blurAfterMosaic, _settings.desaturate, ANON_ORDER_RGBA);
+		_settings.seed, _settings.blurAfterMosaic, _settings.desaturate, ANON_ORDER_RGBA,
+		_settings.cellNoise);
 }
 
 void AnonymizerProcessor::multiThreadProcessImages(OfxRectI p_ProcWindow)
@@ -196,6 +198,7 @@ public:
 		m_MosaicShape = fetchChoiceParam("mosaicShape");
 		m_BlurAfterMosaic = fetchBooleanParam("blurAfterMosaic");
 		m_Desaturate = fetchDoubleParam("desaturate");
+		m_CellNoise = fetchDoubleParam("cellNoise");
 		m_SessionKey = fetchBooleanParam("sessionKey");
 	}
 
@@ -276,6 +279,7 @@ public:
 		settings.seed = AnonComputeSeed((double)m_Seed->getValueAtTime(p_Args.time), jitter, frame,
 			sessionKey ? AnonAlgo::SessionKey() : 0u);
 		settings.desaturate = (float)(m_Desaturate->getValueAtTime(p_Args.time) / 100.0);
+		settings.cellNoise = (float)(m_CellNoise->getValueAtTime(p_Args.time) / 100.0);
 
 		p_Processor.setDstImg(dst.get());
 		p_Processor.setSrcImg(src.get());
@@ -298,6 +302,7 @@ public:
 	OFX::ChoiceParam* m_MosaicShape;
 	OFX::BooleanParam* m_BlurAfterMosaic;
 	OFX::DoubleParam* m_Desaturate;
+	OFX::DoubleParam* m_CellNoise;
 	OFX::BooleanParam* m_SessionKey;
 };
 
@@ -408,6 +413,10 @@ public:
 		shape->appendOption("Hexagon");
 		shape->setDefault(ANON_SHAPE_SQUARE);
 		page->addChild(*shape);
+
+		page->addChild(*defineDouble(p_Desc, "cellNoise", "Cell Noise",
+			"Random brightness offset per mosaic cell, in percent; defeats block-colour matching",
+			CELL_NOISE_MIN, CELL_NOISE_MAX, CELL_NOISE_DFLT));
 
 		BooleanParamDescriptor* blurAfter = p_Desc.defineBooleanParam("blurAfterMosaic");
 		blurAfter->setLabels("Blur After Mosaic", "Blur After Mosaic", "Blur After Mosaic");

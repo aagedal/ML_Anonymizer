@@ -119,6 +119,7 @@ static void InitParameters(PSParameters* p)
 	p->blackout = false;
 	p->blurAfterMosaic = false;
 	p->desaturate = DESATURATE_DFLT;
+	p->cellNoise = CELL_NOISE_DFLT;
 }
 
 /*
@@ -359,6 +360,7 @@ static void DoFilterImpl(uint32_t seed)
 	/* Grayscale has no colour to remove. */
 	const float desaturate = IsGrayMode(gFilterRecord->imageMode)
 		? 0.0f : (float)(gParams->desaturate / 100.0);
+	const float cellNoise = (float)(gParams->cellNoise / 100.0);
 
 	float* buf = (float*)malloc((size_t)w * h * 4 * sizeof(float));
 	float* scratch = NULL; /* allocated only if the CPU fallback runs */
@@ -429,7 +431,7 @@ static void DoFilterImpl(uint32_t seed)
 	}
 	else if (!RunMetalPasses(buf, (int)w, (int)h,
 				amount, scale, blurRadius, mosaicSize, mosaicShape, seed,
-				gParams->blurAfterMosaic != 0, desaturate))
+				gParams->blurAfterMosaic != 0, desaturate, cellNoise))
 	{
 		scratch = (float*)malloc((size_t)w * h * 4 * sizeof(float));
 		if (scratch == NULL)
@@ -439,7 +441,7 @@ static void DoFilterImpl(uint32_t seed)
 		}
 		AnonAlgo::RunLayeredPasses(buf, scratch, (int)w, (int)h,
 			amount, scale, blurRadius, mosaicSize, mosaicShape, seed,
-			gParams->blurAfterMosaic != 0, desaturate, ANON_ORDER_RGBA);
+			gParams->blurAfterMosaic != 0, desaturate, ANON_ORDER_RGBA, cellNoise);
 	}
 
 	/* Write the result back band by band. */

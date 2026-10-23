@@ -172,6 +172,7 @@
 		<target object="10132" channel="./6" name="Temporal Jitter"/>
 		<target object="10132" channel="./7" name="Blackout"/>
 		<target object="10132" channel="./8" name="Mosaic Shape"/>
+		<target object="10132" channel="./13" name="Cell Noise"/>
 		<target object="10132" channel="./9" name="Blur After Mosaic"/>
 		<target object="10132" channel="./10" name="Desaturate"/>
 	</publishSettings>
@@ -306,6 +307,7 @@
 			<parameter name="Desaturate" id="10" flags="12901679120" default="0" value="0"/>
 			<parameter name="Session Key" id="11" flags="12901679120" default="1" value="1"/>
 			<parameter name="Randomize Seed" id="12" flags="12901679120"/>
+			<parameter name="Cell Noise" id="13" flags="12901679120" default="0.03" value="0.03"/>
 			<parameter name="Mix" id="10001" flags="12901679104" default="1" value="1"/>
 			<parameter name="Flip" id="10002" flags="12905938976" default="0" value="0"/>
 			<parameter name="Input Points" id="10003" flags="12905938976" default="1" value="1"/>

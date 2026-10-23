@@ -188,6 +188,7 @@ public:
 		const uint32_t seed = AnonComputeSeed(seedParam, jitter, frame,
 			sessionKey ? AnonAlgo::SessionKey() : 0u);
 		const float desaturate = (float)GetParam(ANON_DESATURATE, clipTime).mFloat64 / 100.0f;
+		const float cellNoise = (float)GetParam(ANON_CELL_NOISE, clipTime).mFloat64 / 100.0f;
 
 		// Zero-mean the displacement field (see AnonAlgo::DisplacementBias).
 		float distortBiasDx = 0.0f, distortBiasDy = 0.0f;
@@ -260,6 +261,7 @@ public:
 		params.mDistortBiasDy = distortBiasDy;
 		params.mDesaturate = desaturate;
 		params.mChannelOrder = ANON_ORDER_BGRA;
+		params.mCellNoise = cellNoise;
 
 		// Layer 1: distortion, input frame -> tmpA
 		params.mSrcPitch = srcPitch;

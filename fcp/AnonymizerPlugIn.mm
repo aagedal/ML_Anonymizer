@@ -396,7 +396,9 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	if (bufSrc == nil || bufA == nil || bufB == nil)
 		return NO;
 
-	AnonParamsHost params = {};
+	// __block: dispatchPass below must see later changes (mBlurDir); a plain
+	// capture would freeze the values at block creation.
+	__block AnonParamsHost params = {};
 	params.mSrcPitch = width;
 	params.mDstPitch = width;
 	params.m16f = 0;

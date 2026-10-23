@@ -23,27 +23,6 @@
 #include <math.h>
 #include <algorithm>
 
-/*
-** Mirrors struct AnonParams in AnonymizerKernel.h (all 32-bit fields).
-*/
-typedef struct
-{
-	int mSrcPitch;
-	int mDstPitch;
-	int m16f;
-	int mWidth;
-	int mHeight;
-	int mBlurRadius;
-	int mBlurDir;
-	int mMosaicShape;
-	float mDistortAmount;
-	float mDistortScale;
-	float mBlurSigma;
-	float mMosaicSize;
-	uint32_t mSeed;
-	float mDistortBiasDx;
-	float mDistortBiasDy;
-} AnonParamsHost;
 
 static prSuiteError CheckForMetalError(NSError* inError)
 {
@@ -205,26 +184,14 @@ public:
 		int32_t frame = 0;
 		if (inRenderParams->inRenderTicksPerFrame != 0)
 			frame = (int32_t)(clipTime / inRenderParams->inRenderTicksPerFrame);
-		const uint32_t seed = AnonComputeSeed(seedParam, jitter, frame);
+		const bool sessionKey = GetParam(ANON_SESSION_KEY, clipTime).mBool != 0;
+		const uint32_t seed = AnonComputeSeed(seedParam, jitter, frame,
+			sessionKey ? AnonAlgo::SessionKey() : 0u);
+		const float desaturate = (float)GetParam(ANON_DESATURATE, clipTime).mFloat64 / 100.0f;
 
-		// Compute the spatial mean of the noise displacement over the frame using a
-		// sparse grid. Subtracting this mean anchors the net image translation to
-		// zero for any seed, which is essential when temporal jitter changes the
-		// seed every frame (otherwise the whole image bounces). VNoise is C1-smooth
-		// so ~64 samples per axis give an accurate estimate with negligible overhead.
-		const float invScaleBias = 1.0f / std::max(distortScale, 2.0f);
-		const int kBiasStep = std::max(1, std::max(width, height) / 64);
-		float sumBiasDx = 0.0f, sumBiasDy = 0.0f;
-		int biasSamples = 0;
-		for (int sy = kBiasStep / 2; sy < height; sy += kBiasStep) {
-			for (int sx = kBiasStep / 2; sx < width; sx += kBiasStep) {
-				sumBiasDx += AnonAlgo::VNoise((float)sx * invScaleBias, (float)sy * invScaleBias, seed, 0u);
-				sumBiasDy += AnonAlgo::VNoise((float)sx * invScaleBias, (float)sy * invScaleBias, seed, 1u);
-				++biasSamples;
-			}
-		}
-		const float distortBiasDx = biasSamples > 0 ? (sumBiasDx / (float)biasSamples) * 2.0f - 1.0f : 0.0f;
-		const float distortBiasDy = biasSamples > 0 ? (sumBiasDy / (float)biasSamples) * 2.0f - 1.0f : 0.0f;
+		// Zero-mean the displacement field (see AnonAlgo::DisplacementBias).
+		float distortBiasDx = 0.0f, distortBiasDy = 0.0f;
+		AnonAlgo::DisplacementBias(width, height, distortScale, seed, &distortBiasDx, &distortBiasDy);
 
 		const int blurRadiusInt = std::min((int)ceilf(blurRadius), 512);
 		const float blurSigma = std::max(blurRadius * 0.5f, 0.1f);
@@ -291,6 +258,8 @@ public:
 		params.mSeed = seed;
 		params.mDistortBiasDx = distortBiasDx;
 		params.mDistortBiasDy = distortBiasDy;
+		params.mDesaturate = desaturate;
+		params.mChannelOrder = ANON_ORDER_BGRA;
 
 		// Layer 1: distortion, input frame -> tmpA
 		params.mSrcPitch = srcPitch;

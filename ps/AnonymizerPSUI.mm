@@ -2,8 +2,8 @@
 ** Multi-Layer Anonymizer - Photoshop filter plugin (Cocoa dialog).
 **
 ** Programmatic modal dialog, no xib: a live preview over four slider rows
-** matching the NLE parameters, a mosaic-shape popup and a blackout
-** checkbox. The preview reruns the shared pass pipeline on the proxy
+** matching the NLE parameters, a mosaic-shape popup, a desaturate slider
+** and a blackout checkbox. The preview reruns the shared pass pipeline on the proxy
 ** buffer on every control change - the proxy is small enough that this is
 ** interactive.
 */
@@ -41,6 +41,7 @@
 	AnonSliderRow* scale;
 	AnonSliderRow* blur;
 	AnonSliderRow* mosaic;
+	AnonSliderRow* desat;
 	NSPopUpButton* shape;
 	NSButton* blackout;
 	NSButton* blurAfterMosaic;
@@ -94,6 +95,7 @@
 	[blur setValue:BLUR_RADIUS_DFLT];
 	[mosaic setValue:MOSAIC_SIZE_DFLT];
 	[shape selectItemAtIndex:ANON_SHAPE_SQUARE];
+	[desat setValue:DESATURATE_DFLT];
 	blackout.state = NSControlStateValueOff;
 	blurAfterMosaic.state = NSControlStateValueOff;
 	[self refreshPreview];
@@ -109,6 +111,7 @@
 	p.mosaicShape = (int32)[shape indexOfSelectedItem];
 	p.blackout = blackout.state == NSControlStateValueOn;
 	p.blurAfterMosaic = blurAfterMosaic.state == NSControlStateValueOn;
+	p.desaturate = [desat value];
 	return p;
 }
 
@@ -140,7 +143,9 @@
 			std::max((float)p.distortScale * ds, 2.0f),
 			std::min((float)p.blurRadius * ds, 512.0f),
 			std::max((float)p.mosaicSize * ds, 1.0f),
-			shapeIdx, 0u, p.blurAfterMosaic != 0);
+			shapeIdx, preview.seed, p.blurAfterMosaic != 0,
+			preview.colorPlanes == 1 ? 0.0f : (float)(p.desaturate / 100.0),
+			ANON_ORDER_RGBA);
 	}
 
 	NSBitmapImageRep* rep = [[NSBitmapImageRep alloc]
@@ -211,7 +216,7 @@ bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* previewIn)
 	@autoreleasepool
 	{
 		const bool hasPreview = previewIn != NULL && previewIn->pixels != NULL;
-		const CGFloat kControlsHeight = 300;
+		const CGFloat kControlsHeight = 332;
 		const CGFloat kPreviewHeight = hasPreview ? 300 : 0;
 
 		NSWindow* window = [[NSWindow alloc]
@@ -243,22 +248,22 @@ bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* previewIn)
 			controller->preview.pixels = NULL;
 		}
 
-		controller->amount = AddSliderRow(content, controller, 256, @"Distortion Amount:",
+		controller->amount = AddSliderRow(content, controller, 288, @"Distortion Amount:",
 			DISTORT_AMOUNT_MIN, DISTORT_AMOUNT_MAX, ioParams->distortAmount);
-		controller->scale = AddSliderRow(content, controller, 224, @"Distortion Scale:",
+		controller->scale = AddSliderRow(content, controller, 256, @"Distortion Scale:",
 			DISTORT_SCALE_MIN, DISTORT_SCALE_MAX, ioParams->distortScale);
-		controller->blur = AddSliderRow(content, controller, 192, @"Blur Radius:",
+		controller->blur = AddSliderRow(content, controller, 224, @"Blur Radius:",
 			BLUR_RADIUS_MIN, BLUR_RADIUS_MAX, ioParams->blurRadius);
-		controller->mosaic = AddSliderRow(content, controller, 160, @"Mosaic Size:",
+		controller->mosaic = AddSliderRow(content, controller, 192, @"Mosaic Size:",
 			MOSAIC_SIZE_MIN, MOSAIC_SIZE_MAX, ioParams->mosaicSize);
 
 		NSTextField* shapeLabel = [NSTextField labelWithString:@"Mosaic Shape:"];
-		shapeLabel.frame = NSMakeRect(16, 126, 150, 20);
+		shapeLabel.frame = NSMakeRect(16, 158, 150, 20);
 		shapeLabel.alignment = NSTextAlignmentRight;
 		[content addSubview:shapeLabel];
 
 		controller->shape = [[NSPopUpButton alloc]
-			initWithFrame:NSMakeRect(174, 122, 150, 26) pullsDown:NO];
+			initWithFrame:NSMakeRect(174, 154, 150, 26) pullsDown:NO];
 		[controller->shape addItemsWithTitles:@[ @"Square", @"Triangle", @"Hexagon" ]];
 		[controller->shape selectItemAtIndex:
 			(ioParams->mosaicShape >= 0 && ioParams->mosaicShape <= 2)
@@ -266,6 +271,9 @@ bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* previewIn)
 		controller->shape.target = controller;
 		controller->shape.action = @selector(controlChanged:);
 		[content addSubview:controller->shape];
+
+		controller->desat = AddSliderRow(content, controller, 126, @"Desaturate (%):",
+			DESATURATE_MIN, DESATURATE_MAX, ioParams->desaturate);
 
 		controller->blurAfterMosaic = [NSButton
 			checkboxWithTitle:@"Blur After Mosaic"

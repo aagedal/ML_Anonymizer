@@ -167,10 +167,13 @@
 		<target object="10132" channel="./3" name="Blur Radius"/>
 		<target object="10132" channel="./4" name="Mosaic Block Size"/>
 		<target object="10132" channel="./5" name="Random Seed"/>
+		<target object="10132" channel="./12" name="Randomize Seed"/>
+		<target object="10132" channel="./11" name="Session Key"/>
 		<target object="10132" channel="./6" name="Temporal Jitter"/>
 		<target object="10132" channel="./7" name="Blackout"/>
 		<target object="10132" channel="./8" name="Mosaic Shape"/>
 		<target object="10132" channel="./9" name="Blur After Mosaic"/>
+		<target object="10132" channel="./10" name="Desaturate"/>
 	</publishSettings>
 	<currentFrame>0 1 1 0</currentFrame>
 	<currentObject>10126</currentObject>
@@ -300,6 +303,9 @@
 			<parameter name="Blackout" id="7" flags="12901679120" default="0" value="0"/>
 			<parameter name="Mosaic Shape" id="8" flags="12901679120" default="0" value="0"/>
 			<parameter name="Blur After Mosaic" id="9" flags="12901679120" default="0" value="0"/>
+			<parameter name="Desaturate" id="10" flags="12901679120" default="0" value="0"/>
+			<parameter name="Session Key" id="11" flags="12901679120" default="1" value="1"/>
+			<parameter name="Randomize Seed" id="12" flags="12901679120"/>
 			<parameter name="Mix" id="10001" flags="12901679104" default="1" value="1"/>
 			<parameter name="Flip" id="10002" flags="12905938976" default="0" value="0"/>
 			<parameter name="Input Points" id="10003" flags="12905938976" default="1" value="1"/>

@@ -2,8 +2,8 @@
 ** Multi-Layer Anonymizer - FxPlug 4 tileable effect implementation.
 **
 ** Same algorithm as the Premiere Pro and OFX plugins: value-noise distortion
-** -> Gaussian blur -> mosaic, plus a Blackout override. The shared buffer
-** kernels run unmodified; FxPlug-specific copy-in/copy-out shaders bridge
+** -> Gaussian blur -> mosaic -> desaturation, plus a Blackout override. The
+** shared buffer kernels run unmodified; FxPlug-specific copy-in/copy-out shaders bridge
 ** the host's IOSurface-backed textures (see FxPlugExtraKernels.h).
 */
 
@@ -14,6 +14,7 @@
 #import <Metal/Metal.h>
 
 #include "AnonymizerAlgo.h"
+#include "AnonymizerKernel.h"
 
 enum
 {
@@ -26,6 +27,9 @@ enum
 	kParamID_Blackout = 7,
 	kParamID_MosaicShape = 8,
 	kParamID_BlurAfterMosaic = 9,
+	kParamID_Desaturate = 10,
+	kParamID_SessionKey = 11,
+	kParamID_RandomizeSeed = 12,
 };
 
 typedef struct
@@ -38,27 +42,8 @@ typedef struct
 	int32_t blackout;
 	int32_t mosaicShape;
 	int32_t blurAfterMosaic;
+	double desaturate; // 0..100
 } AnonFxState;
-
-/*
-** Mirrors struct AnonParams in shared/AnonymizerKernel.h.
-*/
-typedef struct
-{
-	int mSrcPitch;
-	int mDstPitch;
-	int m16f;
-	int mWidth;
-	int mHeight;
-	int mBlurRadius;
-	int mBlurDir;
-	int mMosaicShape;
-	float mDistortAmount;
-	float mDistortScale;
-	float mBlurSigma;
-	float mMosaicSize;
-	uint32_t mSeed;
-} AnonParamsHost;
 
 typedef struct { int width; int height; } AnonCopyParamsHost;
 typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } AnonOutParamsHost;
@@ -176,6 +161,14 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	                                sliderMax:(int)SEED_MAX
 	                                    delta:1
 	                           parameterFlags:kFxParameterFlag_DEFAULT];
+	ok = ok && [paramAPI addPushButtonWithName:@"Randomize Seed"
+	                               parameterID:kParamID_RandomizeSeed
+	                                  selector:@selector(randomizeSeed)
+	                            parameterFlags:kFxParameterFlag_DEFAULT];
+	ok = ok && [paramAPI addToggleButtonWithName:@"Session Key"
+	                                 parameterID:kParamID_SessionKey
+	                                defaultValue:YES
+	                              parameterFlags:kFxParameterFlag_DEFAULT];
 	ok = ok && [paramAPI addToggleButtonWithName:@"Temporal Jitter"
 	                                 parameterID:kParamID_TemporalJitter
 	                                defaultValue:YES
@@ -195,12 +188,38 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	                                defaultValue:NO
 	                              parameterFlags:kFxParameterFlag_DEFAULT];
 
+	ok = ok && [paramAPI addPercentSliderWithName:@"Desaturate"
+	                                  parameterID:kParamID_Desaturate
+	                                 defaultValue:DESATURATE_DFLT / 100.0
+	                                 parameterMin:0.0
+	                                 parameterMax:1.0
+	                                    sliderMin:0.0
+	                                    sliderMax:1.0
+	                                        delta:0.01
+	                               parameterFlags:kFxParameterFlag_DEFAULT];
+
 	if (!ok && error != NULL)
 		*error = [NSError errorWithDomain:FxPlugErrorDomain
 		                             code:kFxError_InvalidParameter
 		                         userInfo:@{ NSLocalizedDescriptionKey :
 		                             @"Unable to add Anonymizer parameters" }];
 	return ok;
+}
+
+// Push-button callback for "Randomize Seed".
+- (void)randomizeSeed
+{
+	id<FxParameterSettingAPI_v5> settingAPI =
+		[_apiManager apiForProtocol:@protocol(FxParameterSettingAPI_v5)];
+	if (settingAPI == nil)
+		return;
+	id<FxCustomParameterActionAPI_v4> actionAPI =
+		[_apiManager apiForProtocol:@protocol(FxCustomParameterActionAPI_v4)];
+	[actionAPI startAction:self];
+	[settingAPI setIntValue:AnonAlgo::RandomSeedValue()
+	            toParameter:kParamID_Seed
+	                 atTime:kCMTimeZero];
+	[actionAPI endAction:self];
 }
 
 - (BOOL)pluginState:(NSData**)pluginState
@@ -224,6 +243,7 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	BOOL jitterState = YES;
 	BOOL blackoutState = NO;
 	BOOL blurAfterMosaicState = NO;
+	BOOL sessionKeyState = YES;
 	int seedValue = 0;
 	[paramAPI getFloatValue:&state.distortAmount fromParameter:kParamID_DistortAmount atTime:renderTime];
 	[paramAPI getFloatValue:&state.distortScale fromParameter:kParamID_DistortScale atTime:renderTime];
@@ -232,6 +252,10 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	[paramAPI getIntValue:&seedValue fromParameter:kParamID_Seed atTime:renderTime];
 	[paramAPI getBoolValue:&jitterState fromParameter:kParamID_TemporalJitter atTime:renderTime];
 	[paramAPI getBoolValue:&blackoutState fromParameter:kParamID_Blackout atTime:renderTime];
+	[paramAPI getBoolValue:&sessionKeyState fromParameter:kParamID_SessionKey atTime:renderTime];
+	double desaturate = 0.0;
+	[paramAPI getFloatValue:&desaturate fromParameter:kParamID_Desaturate atTime:renderTime];
+	state.desaturate = desaturate * 100.0;
 	state.blackout = blackoutState ? 1 : 0;
 	[paramAPI getBoolValue:&blurAfterMosaicState fromParameter:kParamID_BlurAfterMosaic atTime:renderTime];
 	state.blurAfterMosaic = blurAfterMosaicState ? 1 : 0;
@@ -255,7 +279,10 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	{
 		frame = (int32_t)llround(seconds * 30.0);
 	}
-	state.seed = AnonComputeSeed((double)seedValue, jitterState, frame);
+	// pluginState and the render run in the same service process, so they
+	// see the same session key.
+	state.seed = AnonComputeSeed((double)seedValue, jitterState, frame,
+		sessionKeyState ? AnonAlgo::SessionKey() : 0u);
 
 	*pluginState = [NSData dataWithBytes:&state length:sizeof(state)];
 	return *pluginState != nil;
@@ -368,6 +395,10 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	params.mMosaicSize = (float)state.mosaicSize * ds;
 	params.mMosaicShape = state.mosaicShape;
 	params.mSeed = state.seed;
+	AnonAlgo::DisplacementBias(width, height, params.mDistortScale, params.mSeed,
+		&params.mDistortBiasDx, &params.mDistortBiasDy);
+	params.mDesaturate = (float)(state.desaturate / 100.0);
+	params.mChannelOrder = ANON_ORDER_RGBA; // texture reads are always RGBA
 
 	id<MTLCommandBuffer> commandBuffer = [cache.queue commandBuffer];
 	commandBuffer.label = @"MultiLayerAnonymizer";

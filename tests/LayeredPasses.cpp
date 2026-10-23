@@ -27,6 +27,15 @@ int main()
 			check(AnonAlgo::BlurRadiusForOrderChange(radius, true) == radius,
 				"Enabling blur after mosaic should preserve a customized radius");
 	}
+	check(AnonComputeSeed(7.0, true, 3, 0u) != AnonComputeSeed(7.0, true, 3, 0x1234u),
+		"A session key should change the derived seed");
+	check(AnonComputeSeed(7.0, true, 3, 0x1234u) == AnonComputeSeed(7.0, true, 3, 0x1234u),
+		"The derived seed should be deterministic for a fixed session key");
+	for (int i = 0; i < 1000; ++i)
+	{
+		const int v = AnonAlgo::RandomSeedValue();
+		check(v >= 1 && v <= (int)SEED_MAX, "Random seed out of range");
+	}
 	int cases = 0;
 	for (auto size : {std::pair<int, int>{1, 1}, {7, 3}, {31, 23}})
 	for (int shape = 0; shape < 3; ++shape)
@@ -40,6 +49,7 @@ int main()
 			input[i] = (float)((i * 37 + i / 7) % 101) / 100.0f;
 		std::vector<float> a(input.size()), b(input.size()), scratch(input.size());
 		for (bool after : {false, true})
+		for (float desat : {0.0f, 0.6f})
 		{
 			// Explicit reference stages verify ordering and final buffer ownership.
 			AnonAlgo::DistortPass(input.data(), a.data(), w, h, amount, 5.0f, 42u);
@@ -55,11 +65,12 @@ int main()
 				AnonAlgo::BlurPass(b.data(), a.data(), w, h, radius, 1);
 				AnonAlgo::MosaicPass(a.data(), b.data(), w, h, block, shape);
 			}
+			AnonAlgo::DesaturatePass(b.data(), w, h, desat, ANON_ORDER_RGBA);
 			a = input;
 			AnonAlgo::RunLayeredPasses(a.data(), scratch.data(), w, h,
-				amount, 5.0f, radius, block, shape, 42u, after);
+				amount, 5.0f, radius, block, shape, 42u, after, desat);
 			check(a == b, "CPU stage order differs from reference");
-			if (!after)
+			if (!after && desat == 0.0f)
 			{
 				a = input;
 				AnonAlgo::RunLayeredPasses(a.data(), scratch.data(), w, h,
@@ -69,7 +80,7 @@ int main()
 #ifdef ANON_TEST_METAL
 			a = input;
 			check(RunMetalPasses(a.data(), w, h, amount, 5.0f, radius, block,
-				shape, 42u, after), "Metal pipeline failed");
+				shape, 42u, after, desat), "Metal pipeline failed");
 			for (size_t i = 0; i < a.size(); ++i)
 				check(std::isfinite(a[i]) && std::abs(a[i] - b[i]) < 2e-5f,
 					"CPU/Metal output differs");
@@ -87,5 +98,5 @@ int main()
 			check(a == b, "Zero blur should make both orders identical");
 		}
 	}
-	std::printf("Passed %d processing-order cases\n", cases);
+	std::printf("Passed %d processing-order/desaturation cases\n", cases);
 }

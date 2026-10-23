@@ -45,6 +45,7 @@
 /*
 ** Parameter indices, shared by the CPU parameter definitions and the GPU
 ** GetParam() calls (the GPU side subtracts 1 for the input layer itself).
+** Saved projects refer to parameters by index: only ever append.
 */
 enum
 {
@@ -58,6 +59,9 @@ enum
 	ANON_BLACKOUT,
 	ANON_MOSAIC_SHAPE,
 	ANON_BLUR_AFTER_MOSAIC,
+	ANON_DESATURATE,
+	ANON_SESSION_KEY,
+	ANON_RANDOMIZE_SEED,
 	ANON_NUM_PARAMS
 };
 
@@ -68,7 +72,8 @@ enum
 /*
 ** Global out_flags. The value must match AE_Effect_Global_OutFlags in
 ** Anonymizer.r (0x00000004). NON_PARAM_VARY: with temporal jitter enabled the
-** output varies with time even when no parameter is keyframed.
+** output varies with time even when no parameter is keyframed (and with the
+** session key, between launches).
 */
 #define ANONYMIZER_OUT_FLAGS  (PF_OutFlag_NON_PARAM_VARY)
 #define ANONYMIZER_OUT_FLAGS2 (0)

@@ -14,6 +14,7 @@
 #define ANONYMIZER_ALGO_H
 
 #include <math.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <vector>
@@ -39,9 +40,15 @@
 #define MOSAIC_SIZE_MAX      256.0
 #define MOSAIC_SIZE_DFLT     25.0
 
+/* 2^24 - 1: the largest range a float slider (AE valid_max is a float)
+** can step through exactly, and well inside every host's int range. */
 #define SEED_MIN             0.0
-#define SEED_MAX             10000.0
+#define SEED_MAX             16777215.0
 #define SEED_DFLT            0.0
+
+#define DESATURATE_MIN       0.0
+#define DESATURATE_MAX       100.0
+#define DESATURATE_DFLT      0.0
 
 /*
 ** Pixel-space parameters are specified at a 1080p reference and scaled by
@@ -59,6 +66,17 @@ enum
 	ANON_SHAPE_SQUARE = 0,
 	ANON_SHAPE_TRIANGLE = 1,
 	ANON_SHAPE_HEXAGON = 2,
+};
+
+/*
+** Channel layout of the 4-channel buffers, needed only by desaturation
+** (every other pass treats the four channels identically).
+*/
+enum
+{
+	ANON_ORDER_RGBA = 0, // OFX, FxPlug, Photoshop
+	ANON_ORDER_BGRA = 1, // Premiere Pro float / GPU frames
+	ANON_ORDER_ARGB = 2, // After Effects 8-bit worlds
 };
 
 static inline float AnonResolutionScale(int inFrameWidth, int inFrameHeight)
@@ -82,11 +100,13 @@ static inline uint32_t AnonIHash(uint32_t x)
 	return x;
 }
 
-static inline uint32_t AnonComputeSeed(double inSeedParam, bool inJitter, int32_t inFrame)
+static inline uint32_t AnonComputeSeed(double inSeedParam, bool inJitter, int32_t inFrame,
+	uint32_t inSessionKey = 0u)
 {
 	uint32_t s = (uint32_t)(inSeedParam + 0.5);
 	uint32_t f = inJitter ? (uint32_t)inFrame : 0u;
-	return AnonIHash(s * 0x9E3779B1u ^ f * 0x85EBCA77u ^ 0x5BD1E995u);
+	uint32_t h = AnonIHash(s * 0x9E3779B1u ^ f * 0x85EBCA77u ^ 0x5BD1E995u);
+	return inSessionKey ? AnonIHash(h ^ inSessionKey) : h;
 }
 
 namespace AnonAlgo
@@ -103,6 +123,29 @@ inline double BlurRadiusForOrderChange(double radius, bool blurAfterMosaic)
 	return radius;
 }
 
+/*
+** Process-lifetime random key for the "Session Key" option. Drawn from the
+** system CSPRNG on first use and never stored anywhere - not in the project,
+** not on disk - so the exact distortion pattern cannot be reproduced even by
+** someone holding the project file and seed. Non-static inline: one key per
+** process, shared by the CPU and GPU translation units of a plugin.
+*/
+inline uint32_t SessionKey()
+{
+	static const uint32_t sKey = [] {
+		uint32_t k = 0;
+		while (k == 0) // 0 means "no key" to AnonComputeSeed
+			k = arc4random();
+		return k;
+	}();
+	return sKey;
+}
+
+/* Random value for the "Randomize Seed" buttons, within the seed range. */
+inline int RandomSeedValue()
+{
+	return (int)arc4random_uniform((uint32_t)SEED_MAX) + 1;
+}
 
 inline float Rand01(int32_t ix, int32_t iy, uint32_t seed, uint32_t channel)
 {
@@ -163,6 +206,59 @@ inline void SampleBilinear(const float* buf, int w, int h, float x, float y, flo
 	}
 }
 
+/*
+** Raw displacement field in [-1,1] per axis, before mean removal. Two
+** octaves of value noise: the base octave at the user's scale, plus a
+** finer octave (2.7x frequency, half weight) on a lattice rotated by
+** atan(3/4) - an exact rotation (0.8 / 0.6) so CPU and GPU agree bit for
+** bit. The rotated detail octave breaks up the axis-aligned, locally
+** near-affine look of single-octave value noise, so small neighbourhoods
+** are no longer just translated copies that a local-shift model could
+** undo. Keep in sync with AnonDisplacement in AnonymizerKernel.h.
+*/
+inline void Displacement(float x, float y, float invScale, uint32_t seed,
+	float* outDx, float* outDy)
+{
+	float px = x * invScale;
+	float py = y * invScale;
+	float qx = (px * 0.8f - py * 0.6f) * 2.7f;
+	float qy = (px * 0.6f + py * 0.8f) * 2.7f;
+	float n0 = VNoise(px, py, seed, 0u) * 2.0f - 1.0f;
+	float n1 = VNoise(px, py, seed, 1u) * 2.0f - 1.0f;
+	float n2 = VNoise(qx, qy, seed, 2u) * 2.0f - 1.0f;
+	float n3 = VNoise(qx, qy, seed, 3u) * 2.0f - 1.0f;
+	*outDx = (n0 + n2 * 0.5f) * 0.6666667f;
+	*outDy = (n1 + n3 * 0.5f) * 0.6666667f;
+}
+
+/*
+** Value noise has a non-zero spatial mean over any finite domain, causing
+** a net DC translation of the whole image. The mean changes with each seed,
+** so temporal jitter (different seed per frame) makes the whole image bounce.
+** Fix: estimate the mean over a sparse uniform grid and subtract it so the
+** net displacement is zero regardless of seed or frame size. Every host
+** (CPU and GPU) uses this one function so the bias is identical.
+*/
+inline void DisplacementBias(int w, int h, float scale, uint32_t seed,
+	float* outBiasDx, float* outBiasDy)
+{
+	float invScale = 1.0f / std::max(scale, 2.0f);
+	const int kStep = std::max(1, std::max(w, h) / 64);
+	float sumDx = 0.0f, sumDy = 0.0f;
+	int count = 0;
+	for (int sy = kStep / 2; sy < h; sy += kStep) {
+		for (int sx = kStep / 2; sx < w; sx += kStep) {
+			float dx, dy;
+			Displacement((float)sx, (float)sy, invScale, seed, &dx, &dy);
+			sumDx += dx;
+			sumDy += dy;
+			++count;
+		}
+	}
+	*outBiasDx = count > 0 ? sumDx / (float)count : 0.0f;
+	*outBiasDy = count > 0 ? sumDy / (float)count : 0.0f;
+}
+
 inline void DistortPass(const float* src, float* dst, int w, int h,
 	float amount, float scale, uint32_t seed)
 {
@@ -172,33 +268,17 @@ inline void DistortPass(const float* src, float* dst, int w, int h,
 		return;
 	}
 	float invScale = 1.0f / std::max(scale, 2.0f);
-	// Value noise has a non-zero spatial mean over any finite domain, causing
-	// a net DC translation of the whole image. The mean changes with each seed,
-	// so temporal jitter (different seed per frame) makes the whole image bounce.
-	// Fix: estimate the mean over a sparse uniform grid and subtract it so the
-	// net displacement is exactly zero regardless of seed or frame size.
-	// VNoise is C1-smooth, so ~64 samples per axis give an accurate estimate.
-	const int kStep = std::max(1, std::max(w, h) / 64);
-	float sumDx = 0.0f, sumDy = 0.0f;
-	int count = 0;
-	for (int sy = kStep / 2; sy < h; sy += kStep) {
-		for (int sx = kStep / 2; sx < w; sx += kStep) {
-			sumDx += VNoise((float)sx * invScale, (float)sy * invScale, seed, 0u);
-			sumDy += VNoise((float)sx * invScale, (float)sy * invScale, seed, 1u);
-			++count;
-		}
-	}
-	float biasDx = count > 0 ? (sumDx / (float)count) * 2.0f - 1.0f : 0.0f;
-	float biasDy = count > 0 ? (sumDy / (float)count) * 2.0f - 1.0f : 0.0f;
+	float biasDx, biasDy;
+	DisplacementBias(w, h, scale, seed, &biasDx, &biasDy);
 	for (int y = 0; y < h; ++y)
 	{
 		float* out = dst + (size_t)y * w * 4;
 		for (int x = 0; x < w; ++x, out += 4)
 		{
-			float nx = VNoise((float)x * invScale, (float)y * invScale, seed, 0u);
-			float ny = VNoise((float)x * invScale, (float)y * invScale, seed, 1u);
-			float dx = ((nx * 2.0f - 1.0f) - biasDx) * amount;
-			float dy = ((ny * 2.0f - 1.0f) - biasDy) * amount;
+			float nx, ny;
+			Displacement((float)x, (float)y, invScale, seed, &nx, &ny);
+			float dx = (nx - biasDx) * amount;
+			float dy = (ny - biasDy) * amount;
 			SampleBilinear(src, w, h, (float)x + dx, (float)y + dy, out);
 		}
 	}
@@ -351,11 +431,46 @@ inline void MosaicPass(const float* src, float* dst, int w, int h, float blockSi
 	}
 }
 
-// Runs the full stack in place on a packed float buffer (any channel order),
-// using the caller's scratch buffer of the same size. Result lands in `buf`.
+// Rec. 709 luma weights at the R, G, B positions of a channel order.
+inline void LumaWeights(int channelOrder, float outW[4])
+{
+	const float r = 0.2126f, g = 0.7152f, b = 0.0722f;
+	if (channelOrder == ANON_ORDER_BGRA)
+		{ outW[0] = b; outW[1] = g; outW[2] = r; outW[3] = 0.0f; }
+	else if (channelOrder == ANON_ORDER_ARGB)
+		{ outW[0] = 0.0f; outW[1] = r; outW[2] = g; outW[3] = b; }
+	else
+		{ outW[0] = r; outW[1] = g; outW[2] = b; outW[3] = 0.0f; }
+}
+
+// Blends the colour channels toward luma by `amount` (0..1), alpha untouched.
+// Every other pass is linear per channel, so desaturating last is identical
+// to desaturating first. Keep in sync with AnonDesaturate in the MSL.
+inline void DesaturatePass(float* buf, int w, int h, float amount, int channelOrder)
+{
+	if (amount <= 0.0f)
+		return;
+	amount = std::min(amount, 1.0f);
+	float lw[4];
+	LumaWeights(channelOrder, lw);
+	const int alpha = channelOrder == ANON_ORDER_ARGB ? 0 : 3;
+	for (size_t i = 0; i < (size_t)w * h; ++i)
+	{
+		float* p = buf + i * 4;
+		float luma = p[0] * lw[0] + p[1] * lw[1] + p[2] * lw[2] + p[3] * lw[3];
+		for (int c = 0; c < 4; ++c)
+			if (c != alpha)
+				p[c] = p[c] + (luma - p[c]) * amount;
+	}
+}
+
+// Runs the full stack in place on a packed float buffer, using the caller's
+// scratch buffer of the same size. Result lands in `buf`. desaturate is
+// 0..1; channelOrder only matters when it is non-zero.
 inline void RunLayeredPasses(float* buf, float* scratch, int w, int h,
 	float amount, float scale, float blurRadius, float mosaicSize, int mosaicShape,
-	uint32_t seed, bool blurAfterMosaic = false)
+	uint32_t seed, bool blurAfterMosaic = false, float desaturate = 0.0f,
+	int channelOrder = ANON_ORDER_RGBA)
 {
 	DistortPass(buf, scratch, w, h, amount, scale, seed);
 	if (blurAfterMosaic)
@@ -370,6 +485,7 @@ inline void RunLayeredPasses(float* buf, float* scratch, int w, int h,
 		BlurPass(buf, scratch, w, h, blurRadius, 1);
 		MosaicPass(scratch, buf, w, h, mosaicSize, mosaicShape);
 	}
+	DesaturatePass(buf, w, h, desaturate, channelOrder);
 }
 
 } // namespace AnonAlgo

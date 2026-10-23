@@ -104,7 +104,49 @@ PF_Err ParamsSetup(
 	PF_ADD_CHECKBOXX("Blur After Mosaic",
 		FALSE, PF_ParamFlag_SUPERVISE, ANON_BLUR_AFTER_MOSAIC);
 
+	AEFX_CLR_STRUCT(def);
+	PF_ADD_FLOAT_SLIDERX("Desaturate",
+		DESATURATE_MIN, DESATURATE_MAX,
+		DESATURATE_MIN, DESATURATE_MAX,
+		DESATURATE_DFLT, PF_Precision_TENTHS,
+		PF_ValueDisplayFlag_PERCENT, 0, ANON_DESATURATE);
+
+	AEFX_CLR_STRUCT(def);
+	PF_ADD_CHECKBOXX("Session Key",
+		TRUE, 0, ANON_SESSION_KEY);
+
+	AEFX_CLR_STRUCT(def);
+	PF_ADD_BUTTON("Randomize Seed", "Randomize",
+		0, PF_ParamFlag_SUPERVISE, ANON_RANDOMIZE_SEED);
+
 	out_data->num_params = ANON_NUM_PARAMS;
+	return PF_Err_NONE;
+}
+
+PF_Err UserChangedParam(
+	PF_InData* in_data,
+	PF_OutData* out_data,
+	PF_ParamDef* params[],
+	const PF_UserChangedParamExtra* extra)
+{
+	// Premiere may deliver a button press twice; a second new random seed
+	// is harmless.
+	if (extra && extra->param_index == ANON_RANDOMIZE_SEED)
+	{
+		params[ANON_SEED]->u.fs_d.value = (PF_FpLong)RandomSeedValue();
+		params[ANON_SEED]->uu.change_flags = PF_ChangeFlag_CHANGED_VALUE;
+	}
+	else if (extra && extra->param_index == ANON_BLUR_AFTER_MOSAIC)
+	{
+		PF_ParamDef* blur = params[ANON_BLUR_RADIUS];
+		const double radius = BlurRadiusForOrderChange(blur->u.fs_d.value,
+			params[ANON_BLUR_AFTER_MOSAIC]->u.bd.value != 0);
+		if (radius != blur->u.fs_d.value)
+		{
+			blur->u.fs_d.value = radius;
+			blur->uu.change_flags |= PF_ChangeFlag_CHANGED_VALUE;
+		}
+	}
 	return PF_Err_NONE;
 }
 
@@ -139,7 +181,10 @@ PF_Err Render(
 	int32_t frame = 0;
 	if (in_data->time_step != 0)
 		frame = (int32_t)(in_data->current_time / in_data->time_step);
-	uint32_t seed = AnonComputeSeed(seedParam, jitter, frame);
+	const bool sessionKey = params[ANON_SESSION_KEY]->u.bd.value != 0;
+	uint32_t seed = AnonComputeSeed(seedParam, jitter, frame,
+		sessionKey ? SessionKey() : 0u);
+	const float desaturate = (float)params[ANON_DESATURATE]->u.fs_d.value / 100.0f;
 
 	const bool isFloatWorld = (in_data->appl_id == 'PrMr');
 
@@ -202,9 +247,11 @@ PF_Err Render(
 		}
 	}
 
-	// Distortion followed by blur/mosaic in the selected order. Result in bufA.
+	// Distortion followed by blur/mosaic in the selected order, then
+	// desaturation. Premiere floats are BGRA, AE 8-bit worlds ARGB. Result in bufA.
 	RunLayeredPasses(bufA.data(), bufB.data(), w, h, amount, scale, blurRadius, mosaicSize, mosaicShape, seed,
-		params[ANON_BLUR_AFTER_MOSAIC]->u.bd.value != 0);
+		params[ANON_BLUR_AFTER_MOSAIC]->u.bd.value != 0,
+		desaturate, isFloatWorld ? ANON_ORDER_BGRA : ANON_ORDER_ARGB);
 
 	// Store to the output world.
 	if (isFloatWorld)
@@ -261,21 +308,12 @@ extern "C" DllExport PF_Err EffectMain(
 	case PF_Cmd_PARAMS_SETUP:
 		err = ParamsSetup(in_data, out_data, params, inOutput);
 		break;
-	case PF_Cmd_USER_CHANGED_PARAM:
-		if (extra && ((PF_UserChangedParamExtra*)extra)->param_index == ANON_BLUR_AFTER_MOSAIC)
-		{
-			PF_ParamDef* blur = params[ANON_BLUR_RADIUS];
-			const double radius = BlurRadiusForOrderChange(blur->u.fs_d.value,
-				params[ANON_BLUR_AFTER_MOSAIC]->u.bd.value != 0);
-			if (radius != blur->u.fs_d.value)
-			{
-				blur->u.fs_d.value = radius;
-				blur->uu.change_flags |= PF_ChangeFlag_CHANGED_VALUE;
-			}
-		}
-		break;
 	case PF_Cmd_RENDER:
 		err = Render(in_data, out_data, params, inOutput);
+		break;
+	case PF_Cmd_USER_CHANGED_PARAM:
+		err = UserChangedParam(in_data, out_data, params,
+			static_cast<const PF_UserChangedParamExtra*>(extra));
 		break;
 	default:
 		break;

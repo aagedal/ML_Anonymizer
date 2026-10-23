@@ -5,8 +5,10 @@
 ** Start -> Finish, with all pixel work done from Start via advanceState().
 **
 ** The filtered region is gathered band-by-band into one packed RGBA float
-** buffer, run through the shared pass pipeline (distort -> blur -> mosaic,
-** or blackout), and written back band-by-band. Photoshop itself blends the
+** buffer, run through the shared pass pipeline (distort -> blur -> mosaic
+** -> desaturate, or blackout), and written back band-by-band. Every run
+** draws a fresh random seed, so no two applications share a pattern and
+** the pattern is recorded nowhere. Photoshop itself blends the
 ** result through any selection mask, so maskData is never touched here.
 */
 
@@ -116,29 +118,41 @@ static void InitParameters(PSParameters* p)
 	p->mosaicShape = ANON_SHAPE_SQUARE;
 	p->blackout = false;
 	p->blurAfterMosaic = false;
+	p->desaturate = DESATURATE_DFLT;
+}
+
+/*
+** Grows a handle saved by an older version (fewer trailing fields) to the
+** current size and defaults the fields it lacked.
+*/
+static void UpgradeParametersHandle(void)
+{
+	const int32 oldSize = gFilterRecord->handleProcs->getSizeProc(gFilterRecord->parameters);
+	if (oldSize >= (int32)sizeof(PSParameters))
+		return;
+	if (gFilterRecord->handleProcs->setSizeProc(gFilterRecord->parameters,
+			(int32)sizeof(PSParameters)) != noErr)
+	{
+		*gResult = memFullErr;
+		return;
+	}
+	PSParameters* p = (PSParameters*)gFilterRecord->handleProcs->lockProc(
+		gFilterRecord->parameters, TRUE);
+	if (p == NULL)
+		return;
+	PSParameters defaults;
+	InitParameters(&defaults);
+	if (oldSize > 0)
+		memcpy((char*)&defaults, p, (size_t)oldSize);
+	*p = defaults;
+	gFilterRecord->handleProcs->unlockProc(gFilterRecord->parameters);
 }
 
 static void EnsureParametersHandle(void)
 {
 	if (gFilterRecord->parameters != NULL)
 	{
-		// Older versions stored only the fields preceding blurAfterMosaic.
-		if (gFilterRecord->handleProcs->getSizeProc(gFilterRecord->parameters) < (int32)sizeof(PSParameters))
-		{
-			*gResult = gFilterRecord->handleProcs->setSizeProc(
-				gFilterRecord->parameters, sizeof(PSParameters));
-			if (*gResult != noErr)
-				return;
-			PSParameters* p = (PSParameters*)gFilterRecord->handleProcs->lockProc(
-				gFilterRecord->parameters, TRUE);
-			if (p == NULL)
-			{
-				*gResult = memFullErr;
-				return;
-			}
-			p->blurAfterMosaic = false;
-			gFilterRecord->handleProcs->unlockProc(gFilterRecord->parameters);
-		}
+		UpgradeParametersHandle();
 		return;
 	}
 	gFilterRecord->parameters =
@@ -314,7 +328,7 @@ static bool FetchProxy(std::vector<float>& outBuf, PSPreviewContext* outCtx)
 
 /* ---- the filter ---- */
 
-static void DoFilterImpl(void)
+static void DoFilterImpl(uint32_t seed)
 {
 	const VRect filterRect = GetFilterRect();
 	const int32 w = filterRect.right - filterRect.left;
@@ -342,6 +356,9 @@ static void DoFilterImpl(void)
 	int mosaicShape = (int)gParams->mosaicShape;
 	if (mosaicShape < ANON_SHAPE_SQUARE || mosaicShape > ANON_SHAPE_HEXAGON)
 		mosaicShape = ANON_SHAPE_SQUARE;
+	/* Grayscale has no colour to remove. */
+	const float desaturate = IsGrayMode(gFilterRecord->imageMode)
+		? 0.0f : (float)(gParams->desaturate / 100.0);
 
 	float* buf = (float*)malloc((size_t)w * h * 4 * sizeof(float));
 	float* scratch = NULL; /* allocated only if the CPU fallback runs */
@@ -411,7 +428,8 @@ static void DoFilterImpl(void)
 				buf[i * 4 + c] = 0.0f;
 	}
 	else if (!RunMetalPasses(buf, (int)w, (int)h,
-				amount, scale, blurRadius, mosaicSize, mosaicShape, 0u, gParams->blurAfterMosaic != 0))
+				amount, scale, blurRadius, mosaicSize, mosaicShape, seed,
+				gParams->blurAfterMosaic != 0, desaturate))
 	{
 		scratch = (float*)malloc((size_t)w * h * 4 * sizeof(float));
 		if (scratch == NULL)
@@ -420,7 +438,8 @@ static void DoFilterImpl(void)
 			goto cleanup;
 		}
 		AnonAlgo::RunLayeredPasses(buf, scratch, (int)w, (int)h,
-			amount, scale, blurRadius, mosaicSize, mosaicShape, 0u, gParams->blurAfterMosaic != 0);
+			amount, scale, blurRadius, mosaicSize, mosaicShape, seed,
+			gParams->blurAfterMosaic != 0, desaturate, ANON_ORDER_RGBA);
 	}
 
 	/* Write the result back band by band. */
@@ -495,19 +514,24 @@ static void DoStart(void)
 
 	PSParameters saved = *gParams;
 
+	/* Fresh per run (Cmd-F and actions included); the preview uses it too,
+	** so what the dialog shows is exactly what gets rendered. */
+	const uint32_t seed = AnonIHash(arc4random());
+
 	bool run = true;
 	if (gData->queryForParameters)
 	{
 		std::vector<float> proxyPixels;
 		PSPreviewContext preview = {};
 		const bool hasProxy = FetchProxy(proxyPixels, &preview);
+		preview.seed = seed;
 		run = DoParamDialog(gParams, hasProxy ? &preview : NULL);
 		gData->queryForParameters = false;
 	}
 
 	if (run)
 	{
-		DoFilterImpl();
+		DoFilterImpl(seed);
 	}
 	else
 	{

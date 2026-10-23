@@ -37,8 +37,8 @@
 #define kPluginDescription \
 	"Anonymizes a region with three stacked layers - random distortion, " \
 	"Gaussian blur and mosaic - so the result cannot be reversed by " \
-	"deblurring or mosaic-reconstruction tools. Blackout replaces the " \
-	"stack with solid black."
+	"deblurring or mosaic-reconstruction tools. Desaturate optionally " \
+	"removes colour; Blackout replaces the stack with solid black."
 #define kPluginIdentifier ANON_OFX_PLUGIN_ID
 #define kPluginVersionMajor MAJOR_VERSION
 #define kPluginVersionMinor MINOR_VERSION
@@ -47,6 +47,7 @@
 #define kSupportsMultiResolution false
 #define kSupportsMultipleClipPARs false
 
+// Must match AnonRenderSettings in AnonymizerOFXMetal.mm.
 struct AnonRenderSettings
 {
 	float distortAmount;
@@ -57,6 +58,7 @@ struct AnonRenderSettings
 	bool blackout;
 	int mosaicShape;
 	bool blurAfterMosaic;
+	float desaturate; // 0..1
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -151,7 +153,7 @@ void AnonymizerProcessor::computeFullCPU()
 	AnonAlgo::RunLayeredPasses(_cpuResult.data(), scratch.data(), w, h,
 		_settings.distortAmount, _settings.distortScale,
 		_settings.blurRadius, _settings.mosaicSize, _settings.mosaicShape,
-		_settings.seed, _settings.blurAfterMosaic);
+		_settings.seed, _settings.blurAfterMosaic, _settings.desaturate, ANON_ORDER_RGBA);
 }
 
 void AnonymizerProcessor::multiThreadProcessImages(OfxRectI p_ProcWindow)
@@ -193,6 +195,8 @@ public:
 		m_Blackout = fetchBooleanParam("blackout");
 		m_MosaicShape = fetchChoiceParam("mosaicShape");
 		m_BlurAfterMosaic = fetchBooleanParam("blurAfterMosaic");
+		m_Desaturate = fetchDoubleParam("desaturate");
+		m_SessionKey = fetchBooleanParam("sessionKey");
 	}
 
 	virtual void render(const OFX::RenderArguments& p_Args)
@@ -211,7 +215,14 @@ public:
 
 	void changedParam(const OFX::InstanceChangedArgs& args, const std::string& name) override
 	{
-		if (name != "blurAfterMosaic" || args.reason != OFX::eChangeUserEdit)
+		if (args.reason != OFX::eChangeUserEdit)
+			return;
+		if (name == "randomizeSeed")
+		{
+			m_Seed->setValue(AnonAlgo::RandomSeedValue());
+			return;
+		}
+		if (name != "blurAfterMosaic")
 			return;
 		const double current = m_BlurRadius->getValueAtTime(args.time);
 		const double radius = AnonAlgo::BlurRadiusForOrderChange(current,
@@ -261,7 +272,10 @@ public:
 		// OFX time is in frames.
 		const bool jitter = m_TemporalJitter->getValueAtTime(p_Args.time);
 		const int32_t frame = (int32_t)(p_Args.time + 0.5);
-		settings.seed = AnonComputeSeed((double)m_Seed->getValueAtTime(p_Args.time), jitter, frame);
+		const bool sessionKey = m_SessionKey->getValueAtTime(p_Args.time);
+		settings.seed = AnonComputeSeed((double)m_Seed->getValueAtTime(p_Args.time), jitter, frame,
+			sessionKey ? AnonAlgo::SessionKey() : 0u);
+		settings.desaturate = (float)(m_Desaturate->getValueAtTime(p_Args.time) / 100.0);
 
 		p_Processor.setDstImg(dst.get());
 		p_Processor.setSrcImg(src.get());
@@ -283,6 +297,8 @@ public:
 	OFX::BooleanParam* m_Blackout;
 	OFX::ChoiceParam* m_MosaicShape;
 	OFX::BooleanParam* m_BlurAfterMosaic;
+	OFX::DoubleParam* m_Desaturate;
+	OFX::BooleanParam* m_SessionKey;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -359,6 +375,19 @@ public:
 		seed->setDisplayRange((int)SEED_MIN, (int)SEED_MAX);
 		page->addChild(*seed);
 
+		PushButtonParamDescriptor* randomize = p_Desc.definePushButtonParam("randomizeSeed");
+		randomize->setLabels("Randomize Seed", "Randomize Seed", "Randomize Seed");
+		randomize->setHint("Pick a new random seed");
+		page->addChild(*randomize);
+
+		BooleanParamDescriptor* sessionKey = p_Desc.defineBooleanParam("sessionKey");
+		sessionKey->setLabels("Session Key", "Session Key", "Session Key");
+		sessionKey->setHint("Mix an unrecorded random key, new on every launch, into the distortion "
+			"pattern so it cannot be reproduced from the project file. Turn off for renders "
+			"that must be identical across launches.");
+		sessionKey->setDefault(true);
+		page->addChild(*sessionKey);
+
 		BooleanParamDescriptor* jitter = p_Desc.defineBooleanParam("temporalJitter");
 		jitter->setLabels("Temporal Jitter", "Temporal Jitter", "Temporal Jitter");
 		jitter->setHint("Use a new distortion pattern on every frame");
@@ -385,6 +414,10 @@ public:
 		blurAfter->setHint("Apply blur after mosaic to soften the visible cell edges");
 		blurAfter->setDefault(false);
 		page->addChild(*blurAfter);
+		DoubleParamDescriptor* desat = defineDouble(p_Desc, "desaturate", "Desaturate",
+			"Remove colour from the anonymized region, in percent",
+			DESATURATE_MIN, DESATURATE_MAX, DESATURATE_DFLT);
+		page->addChild(*desat);
 	}
 
 	virtual ImageEffect* createInstance(OfxImageEffectHandle p_Handle, ContextEnum /*p_Context*/)

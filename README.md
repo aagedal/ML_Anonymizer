@@ -62,6 +62,20 @@ the shorter frame dimension, so the anonymization strength is identical at
 1080p, 4K, or 8K — and proxy/preview renders match the full-resolution
 output automatically.
 
+The defaults are tuned so a close-up face, where the face fills much of the
+frame, loses its identifying features. Lowering them trades protection for
+looks. As a rule, don't go more than 30 % below the defaults:
+
+| Parameter | Default | Recommended minimum |
+|---|---|---|
+| Distortion Amount | 18 | 13 |
+| Blur Radius | 18 | 13 |
+| Blur Radius (Blur After Mosaic) | 40 | 28 |
+| Mosaic Block Size | 30 | 21 |
+
+Smaller faces in wider shots are covered by fewer cells, so they tolerate
+lower values; check the result at full resolution before going below these.
+
 Blackout is the zero-information option: nothing of the covered pixels
 survives, so use it (with an effect mask) when the region must be provably
 unrecoverable and aesthetics don't matter.

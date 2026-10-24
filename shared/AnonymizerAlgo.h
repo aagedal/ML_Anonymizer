@@ -21,22 +21,22 @@
 #include <algorithm>
 
 /*
-** Parameter ranges and defaults, shared by both host UIs. The minimums of
-** the three layer strengths sit 30 % below their defaults, so a slider
-** cannot quietly weaken a layer past that; the Distortion / Blur / Mosaic
+** Parameter ranges and defaults, shared by both host UIs. The three layer
+** strengths have floors 25-30 % below their defaults, so a slider cannot
+** quietly weaken a layer past that; the Distortion / Blur / Mosaic
 ** checkboxes switch a layer off entirely instead (for previewing).
 */
-#define DISTORT_AMOUNT_MIN   13.0
+#define DISTORT_AMOUNT_MIN   15.0
 #define DISTORT_AMOUNT_MAX   200.0
-#define DISTORT_AMOUNT_DFLT  18.0
+#define DISTORT_AMOUNT_DFLT  20.0
 
 #define DISTORT_SCALE_MIN    4.0
 #define DISTORT_SCALE_MAX    400.0
 #define DISTORT_SCALE_DFLT   11.0
 
-#define BLUR_RADIUS_MIN      13.0
+#define BLUR_RADIUS_MIN      15.0
 #define BLUR_RADIUS_MAX      100.0
-#define BLUR_RADIUS_DFLT     18.0
+#define BLUR_RADIUS_DFLT     20.0
 #define BLUR_AFTER_MOSAIC_RADIUS_DFLT 40.0
 /* Earlier blur defaults, still paired up for older projects. */
 #define BLUR_RADIUS_LEGACY_DFLT             15.0
@@ -66,7 +66,7 @@
 ** (max +/-): shifts each cell's hue as well as its brightness. */
 #define COLOR_NOISE_MIN      0.0
 #define COLOR_NOISE_MAX      25.0
-#define COLOR_NOISE_DFLT     2.0
+#define COLOR_NOISE_DFLT     1.0
 
 /*
 ** Pixel-space parameters are specified at a 1080p reference and scaled by

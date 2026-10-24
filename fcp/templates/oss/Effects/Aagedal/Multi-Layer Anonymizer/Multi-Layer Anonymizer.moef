@@ -299,9 +299,9 @@
 		<filter name="Multi-Layer Anonymizer" id="10132" factoryID="6" pluginUUID="211035B9-C3CF-42E6-B8CB-F9C28DC3B98A" pluginVersion="1" pluginName="Multi-Layer Anonymizer" pluginDynamicParams="0">
 			<timing in="0 1 1 0" out="1532928 153600 1 0" offset="0 1 1 0"/>
 			<baseFlags>8589934609</baseFlags>
-			<parameter name="Distortion Amount" id="1" flags="12901679120" default="18" value="18"/>
+			<parameter name="Distortion Amount" id="1" flags="12901679120" default="20" value="20"/>
 			<parameter name="Distortion Scale" id="2" flags="12901679120" default="11" value="11"/>
-			<parameter name="Blur Radius" id="3" flags="12901679120" default="18" value="18"/>
+			<parameter name="Blur Radius" id="3" flags="12901679120" default="20" value="20"/>
 			<parameter name="Mosaic Block Size" id="4" flags="12901679120" default="30" value="30"/>
 			<parameter name="Random Seed" id="5" flags="12901679120" default="0" value="0"/>
 			<parameter name="Temporal Jitter" id="6" flags="12901679120" default="1" value="1"/>
@@ -312,7 +312,7 @@
 			<parameter name="Session Key" id="11" flags="12901679120" default="1" value="1"/>
 			<parameter name="Randomize Seed" id="12" flags="12901679120"/>
 			<parameter name="Cell Noise" id="13" flags="12901679120" default="0.03" value="0.03"/>
-			<parameter name="Colour Noise" id="14" flags="12901679120" default="0.02" value="0.02"/>
+			<parameter name="Colour Noise" id="14" flags="12901679120" default="0.01" value="0.01"/>
 			<parameter name="Enable Distortion" id="15" flags="12901679120" default="1" value="1"/>
 			<parameter name="Enable Blur" id="16" flags="12901679120" default="1" value="1"/>
 			<parameter name="Enable Mosaic" id="17" flags="12901679120" default="1" value="1"/>

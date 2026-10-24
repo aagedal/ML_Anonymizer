@@ -66,7 +66,7 @@
 ** (max +/-): shifts each cell's hue as well as its brightness. */
 #define COLOR_NOISE_MIN      0.0
 #define COLOR_NOISE_MAX      25.0
-#define COLOR_NOISE_DFLT     0.0
+#define COLOR_NOISE_DFLT     2.0
 
 /*
 ** Pixel-space parameters are specified at a 1080p reference and scaled by

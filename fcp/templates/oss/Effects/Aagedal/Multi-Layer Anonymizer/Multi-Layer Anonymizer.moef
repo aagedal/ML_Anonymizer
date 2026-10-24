@@ -312,7 +312,7 @@
 			<parameter name="Session Key" id="11" flags="12901679120" default="1" value="1"/>
 			<parameter name="Randomize Seed" id="12" flags="12901679120"/>
 			<parameter name="Cell Noise" id="13" flags="12901679120" default="0.03" value="0.03"/>
-			<parameter name="Colour Noise" id="14" flags="12901679120" default="0" value="0"/>
+			<parameter name="Colour Noise" id="14" flags="12901679120" default="0.02" value="0.02"/>
 			<parameter name="Enable Distortion" id="15" flags="12901679120" default="1" value="1"/>
 			<parameter name="Enable Blur" id="16" flags="12901679120" default="1" value="1"/>
 			<parameter name="Enable Mosaic" id="17" flags="12901679120" default="1" value="1"/>

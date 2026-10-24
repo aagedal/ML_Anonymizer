@@ -44,7 +44,7 @@ but they do not guarantee that identifying information is unrecoverable.
 | Mosaic Block Size | 30 | Pixelation block size (minimum 21) |
 | Mosaic Shape | Square | Square, Triangle, or Hexagon tiling |
 | Cell Noise | 3 % | Random brightness offset per mosaic cell (up to ±25 % of full range) |
-| Colour Noise | 0 % | Random per-channel offset per mosaic cell (up to ±25 % of full range) |
+| Colour Noise | 2 % | Random per-channel offset per mosaic cell (up to ±25 % of full range) |
 | Blur After Mosaic | Off | Runs distortion → mosaic → blur to soften visible cell edges |
 | Random Seed | 0 | Change for a different distortion pattern (0–16,777,215) |
 | Randomize Seed | — | Button: picks a new random seed |

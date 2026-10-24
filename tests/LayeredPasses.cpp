@@ -14,15 +14,15 @@ static void check(bool ok, const char* message)
 
 int main()
 {
-	check(AnonAlgo::BlurRadiusForOrderChange(18.0, true) == 40.0,
+	check(AnonAlgo::BlurRadiusForOrderChange(20.0, true) == 40.0,
 		"Enabling blur after mosaic should promote the default to 40");
-	check(AnonAlgo::BlurRadiusForOrderChange(40.0, false) == 18.0,
-		"Disabling blur after mosaic should restore the default to 18");
+	check(AnonAlgo::BlurRadiusForOrderChange(40.0, false) == 20.0,
+		"Disabling blur after mosaic should restore the default to 20");
 	check(AnonAlgo::BlurRadiusForOrderChange(15.0, true) == 35.0,
 		"Enabling blur after mosaic should promote the legacy default to 35");
 	check(AnonAlgo::BlurRadiusForOrderChange(35.0, false) == 15.0,
 		"Disabling blur after mosaic should restore the legacy default to 15");
-	for (double radius : {0.0, 10.0, 15.0, 18.0, 20.0, 35.0, 40.0, 100.0})
+	for (double radius : {0.0, 10.0, 15.0, 18.0, 20.0, 25.0, 35.0, 40.0, 100.0})
 	{
 		if (radius != BLUR_AFTER_MOSAIC_RADIUS_DFLT && radius != BLUR_AFTER_MOSAIC_RADIUS_LEGACY_DFLT)
 			check(AnonAlgo::BlurRadiusForOrderChange(radius, false) == radius,

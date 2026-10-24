@@ -305,6 +305,9 @@ if(EXISTS "${PS_SDK_PATH}/photoshopapi/photoshop/PIFilter.h")
 	if(NOT DEFINED ANON_PS_ACTION_NAME)
 		set(ANON_PS_ACTION_NAME "Anonymizer Action")
 	endif()
+	if(NOT DEFINED ANON_PS_ACTION_FKEY)
+		set(ANON_PS_ACTION_FKEY 9)
+	endif()
 	set(PS_ACTION_OUT "${CMAKE_CURRENT_BINARY_DIR}/${ANON_BUNDLE_BASE}Action.atn")
 	add_custom_command(
 		OUTPUT "${PS_ACTION_OUT}"
@@ -314,6 +317,7 @@ if(EXISTS "${PS_SDK_PATH}/photoshopapi/photoshop/PIFilter.h")
 			"${ANON_CATEGORY}"
 			"${ANON_PS_ACTION_NAME}"
 			"${ANON_EFFECT_NAME}..."
+			"${ANON_PS_ACTION_FKEY}"
 		DEPENDS
 			"${CMAKE_CURRENT_SOURCE_DIR}/ps/actions/AagedalAnonymizer.atn"
 			"${CMAKE_CURRENT_SOURCE_DIR}/scripts/make_ps_action.py"

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 # VERSION is the single source of truth — bump here only.
-project(PremiereAnonymizer VERSION 1.7.0 LANGUAGES CXX OBJCXX)
+project(PremiereAnonymizer VERSION 1.8.0 LANGUAGES CXX OBJCXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

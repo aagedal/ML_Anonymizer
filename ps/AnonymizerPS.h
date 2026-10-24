@@ -36,6 +36,10 @@ typedef struct PSParameters
 	int32 blurAfterMosaic;
 	double desaturate; /* 0..100 */
 	double cellNoise; /* 0..CELL_NOISE_MAX percent */
+	double colorNoise; /* 0..COLOR_NOISE_MAX percent */
+	int32 enableDistort; /* layer switches, for previewing the others */
+	int32 enableBlur;
+	int32 enableMosaic;
 } PSParameters;
 
 /*
@@ -71,6 +75,6 @@ void DoAboutDialog(void);
 bool RunMetalPasses(float* buf, int w, int h,
 	float amount, float scale, float blurRadius, float mosaicSize,
 	int mosaicShape, uint32_t seed, bool blurAfterMosaic, float desaturate,
-	float cellNoise);
+	float cellNoise, float colorNoise);
 
 #endif

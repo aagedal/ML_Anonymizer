@@ -167,10 +167,14 @@ public:
 		// orientation-invariant (portrait vs landscape timelines).
 		const float ds = AnonResolutionScale(width, height);
 
-		const float distortAmount = (float)GetParam(ANON_DISTORT_AMOUNT, clipTime).mFloat64 * ds;
+		const float distortAmount = AnonAlgo::LayerStrength(GetParam(ANON_DISTORT_AMOUNT, clipTime).mFloat64,
+			DISTORT_AMOUNT_MIN, GetParam(ANON_ENABLE_DISTORT, clipTime).mBool != 0, ds, 0.0f);
 		const float distortScale = std::max((float)GetParam(ANON_DISTORT_SCALE, clipTime).mFloat64 * ds, 2.0f);
-		const float blurRadius = (float)GetParam(ANON_BLUR_RADIUS, clipTime).mFloat64 * ds;
-		const float mosaicSize = (float)GetParam(ANON_MOSAIC_SIZE, clipTime).mFloat64 * ds;
+		const float blurRadius = AnonAlgo::LayerStrength(GetParam(ANON_BLUR_RADIUS, clipTime).mFloat64,
+			BLUR_RADIUS_MIN, GetParam(ANON_ENABLE_BLUR, clipTime).mBool != 0, ds, 0.0f);
+		// 1 px blocks disable the mosaic pass (and with it the cell/colour noise).
+		const float mosaicSize = AnonAlgo::LayerStrength(GetParam(ANON_MOSAIC_SIZE, clipTime).mFloat64,
+			MOSAIC_SIZE_MIN, GetParam(ANON_ENABLE_MOSAIC, clipTime).mBool != 0, ds, 1.0f);
 		const double seedParam = GetParam(ANON_SEED, clipTime).mFloat64;
 		const bool jitter = GetParam(ANON_TEMPORAL_JITTER, clipTime).mBool != 0;
 		const bool blurAfterMosaic = GetParam(ANON_BLUR_AFTER_MOSAIC, clipTime).mBool != 0;
@@ -189,6 +193,7 @@ public:
 			sessionKey ? AnonAlgo::SessionKey() : 0u);
 		const float desaturate = (float)GetParam(ANON_DESATURATE, clipTime).mFloat64 / 100.0f;
 		const float cellNoise = (float)GetParam(ANON_CELL_NOISE, clipTime).mFloat64 / 100.0f;
+		const float colorNoise = (float)GetParam(ANON_COLOR_NOISE, clipTime).mFloat64 / 100.0f;
 
 		// Zero-mean the displacement field (see AnonAlgo::DisplacementBias).
 		float distortBiasDx = 0.0f, distortBiasDy = 0.0f;
@@ -262,6 +267,7 @@ public:
 		params.mDesaturate = desaturate;
 		params.mChannelOrder = ANON_ORDER_BGRA;
 		params.mCellNoise = cellNoise;
+		params.mColorNoise = colorNoise;
 
 		// Layer 1: distortion, input frame -> tmpA
 		params.mSrcPitch = srcPitch;

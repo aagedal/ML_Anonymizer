@@ -126,6 +126,27 @@ PF_Err ParamsSetup(
 		CELL_NOISE_DFLT, PF_Precision_TENTHS,
 		PF_ValueDisplayFlag_PERCENT, 0, ANON_CELL_NOISE);
 
+	AEFX_CLR_STRUCT(def);
+	PF_ADD_FLOAT_SLIDERX("Colour Noise",
+		COLOR_NOISE_MIN, COLOR_NOISE_MAX,
+		COLOR_NOISE_MIN, COLOR_NOISE_MAX,
+		COLOR_NOISE_DFLT, PF_Precision_TENTHS,
+		PF_ValueDisplayFlag_PERCENT, 0, ANON_COLOR_NOISE);
+
+	// Appended (params match by index): switch a layer off to preview the
+	// others, since the strength sliders stop at their minimums.
+	AEFX_CLR_STRUCT(def);
+	PF_ADD_CHECKBOXX("Enable Distortion",
+		TRUE, 0, ANON_ENABLE_DISTORT);
+
+	AEFX_CLR_STRUCT(def);
+	PF_ADD_CHECKBOXX("Enable Blur",
+		TRUE, 0, ANON_ENABLE_BLUR);
+
+	AEFX_CLR_STRUCT(def);
+	PF_ADD_CHECKBOXX("Enable Mosaic",
+		TRUE, 0, ANON_ENABLE_MOSAIC);
+
 	out_data->num_params = ANON_NUM_PARAMS;
 	return PF_Err_NONE;
 }
@@ -174,10 +195,14 @@ PF_Err Render(
 	// resolutions and orientations (portrait vs landscape timelines).
 	const float ds = AnonResolutionScale(w, h);
 
-	float amount = (float)params[ANON_DISTORT_AMOUNT]->u.fs_d.value * ds;
+	float amount = LayerStrength(params[ANON_DISTORT_AMOUNT]->u.fs_d.value, DISTORT_AMOUNT_MIN,
+		params[ANON_ENABLE_DISTORT]->u.bd.value != 0, ds, 0.0f);
 	float scale = std::max((float)params[ANON_DISTORT_SCALE]->u.fs_d.value * ds, 2.0f);
-	float blurRadius = (float)params[ANON_BLUR_RADIUS]->u.fs_d.value * ds;
-	float mosaicSize = (float)params[ANON_MOSAIC_SIZE]->u.fs_d.value * ds;
+	float blurRadius = LayerStrength(params[ANON_BLUR_RADIUS]->u.fs_d.value, BLUR_RADIUS_MIN,
+		params[ANON_ENABLE_BLUR]->u.bd.value != 0, ds, 0.0f);
+	// 1 px blocks disable the mosaic pass (and with it the cell/colour noise).
+	float mosaicSize = LayerStrength(params[ANON_MOSAIC_SIZE]->u.fs_d.value, MOSAIC_SIZE_MIN,
+		params[ANON_ENABLE_MOSAIC]->u.bd.value != 0, ds, 1.0f);
 	double seedParam = params[ANON_SEED]->u.fs_d.value;
 	bool jitter = params[ANON_TEMPORAL_JITTER]->u.bd.value != 0;
 	// Popup values are 1-based.
@@ -193,6 +218,7 @@ PF_Err Render(
 		sessionKey ? SessionKey() : 0u);
 	const float desaturate = (float)params[ANON_DESATURATE]->u.fs_d.value / 100.0f;
 	const float cellNoise = (float)params[ANON_CELL_NOISE]->u.fs_d.value / 100.0f;
+	const float colorNoise = (float)params[ANON_COLOR_NOISE]->u.fs_d.value / 100.0f;
 
 	const bool isFloatWorld = (in_data->appl_id == 'PrMr');
 
@@ -259,7 +285,7 @@ PF_Err Render(
 	// desaturation. Premiere floats are BGRA, AE 8-bit worlds ARGB. Result in bufA.
 	RunLayeredPasses(bufA.data(), bufB.data(), w, h, amount, scale, blurRadius, mosaicSize, mosaicShape, seed,
 		params[ANON_BLUR_AFTER_MOSAIC]->u.bd.value != 0,
-		desaturate, isFloatWorld ? ANON_ORDER_BGRA : ANON_ORDER_ARGB, cellNoise);
+		desaturate, isFloatWorld ? ANON_ORDER_BGRA : ANON_ORDER_ARGB, cellNoise, colorNoise);
 
 	// Store to the output world.
 	if (isFloatWorld)

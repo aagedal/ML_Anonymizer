@@ -88,7 +88,7 @@ static void DispatchPass(
 bool RunMetalPasses(float* buf, int w, int h,
 	float amount, float scale, float blurRadius, float mosaicSize,
 	int mosaicShape, uint32_t seed, bool blurAfterMosaic, float desaturate,
-	float cellNoise)
+	float cellNoise, float colorNoise)
 {
 	@autoreleasepool
 	{
@@ -125,6 +125,7 @@ bool RunMetalPasses(float* buf, int w, int h,
 		params.mDesaturate = desaturate;
 		params.mChannelOrder = ANON_ORDER_RGBA;
 		params.mCellNoise = cellNoise;
+		params.mColorNoise = colorNoise;
 
 		id<MTLCommandBuffer> commandBuffer = [sQueue commandBuffer];
 		commandBuffer.label = @"MultiLayerAnonymizerPS";

@@ -31,6 +31,10 @@ enum
 	kParamID_SessionKey = 11,
 	kParamID_RandomizeSeed = 12,
 	kParamID_CellNoise = 13,
+	kParamID_ColorNoise = 14,
+	kParamID_EnableDistort = 15,
+	kParamID_EnableBlur = 16,
+	kParamID_EnableMosaic = 17,
 };
 
 typedef struct
@@ -45,6 +49,10 @@ typedef struct
 	int32_t blurAfterMosaic;
 	double desaturate; // 0..100
 	double cellNoise; // 0..100
+	double colorNoise; // 0..100
+	int32_t enableDistort;
+	int32_t enableBlur;
+	int32_t enableMosaic;
 } AnonFxState;
 
 typedef struct { int width; int height; } AnonCopyParamsHost;
@@ -117,7 +125,13 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 		return NO;
 	}
 
+	// The strength sliders stop at their minimums; the Enable toggles switch
+	// a layer off entirely, for previewing the others.
 	BOOL ok = YES;
+	ok = ok && [paramAPI addToggleButtonWithName:@"Enable Distortion"
+	                                 parameterID:kParamID_EnableDistort
+	                                defaultValue:YES
+	                              parameterFlags:kFxParameterFlag_DEFAULT];
 	ok = ok && [paramAPI addFloatSliderWithName:@"Distortion Amount"
 	                                parameterID:kParamID_DistortAmount
 	                               defaultValue:DISTORT_AMOUNT_DFLT
@@ -136,6 +150,10 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	                                  sliderMax:DISTORT_SCALE_MAX
 	                                      delta:0.1
 	                             parameterFlags:kFxParameterFlag_DEFAULT];
+	ok = ok && [paramAPI addToggleButtonWithName:@"Enable Blur"
+	                                 parameterID:kParamID_EnableBlur
+	                                defaultValue:YES
+	                              parameterFlags:kFxParameterFlag_DEFAULT];
 	ok = ok && [paramAPI addFloatSliderWithName:@"Blur Radius"
 	                                parameterID:kParamID_BlurRadius
 	                               defaultValue:BLUR_RADIUS_DFLT
@@ -145,6 +163,10 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	                                  sliderMax:BLUR_RADIUS_MAX
 	                                      delta:0.1
 	                             parameterFlags:kFxParameterFlag_DEFAULT];
+	ok = ok && [paramAPI addToggleButtonWithName:@"Enable Mosaic"
+	                                 parameterID:kParamID_EnableMosaic
+	                                defaultValue:YES
+	                              parameterFlags:kFxParameterFlag_DEFAULT];
 	ok = ok && [paramAPI addFloatSliderWithName:@"Mosaic Block Size"
 	                                parameterID:kParamID_MosaicSize
 	                               defaultValue:MOSAIC_SIZE_DFLT
@@ -192,6 +214,16 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	                                 parameterMax:CELL_NOISE_MAX / 100.0
 	                                    sliderMin:CELL_NOISE_MIN / 100.0
 	                                    sliderMax:CELL_NOISE_MAX / 100.0
+	                                        delta:0.001
+	                               parameterFlags:kFxParameterFlag_DEFAULT];
+
+	ok = ok && [paramAPI addPercentSliderWithName:@"Colour Noise"
+	                                  parameterID:kParamID_ColorNoise
+	                                 defaultValue:COLOR_NOISE_DFLT / 100.0
+	                                 parameterMin:COLOR_NOISE_MIN / 100.0
+	                                 parameterMax:COLOR_NOISE_MAX / 100.0
+	                                    sliderMin:COLOR_NOISE_MIN / 100.0
+	                                    sliderMax:COLOR_NOISE_MAX / 100.0
 	                                        delta:0.001
 	                               parameterFlags:kFxParameterFlag_DEFAULT];
 
@@ -271,6 +303,16 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	double cellNoise = 0.0;
 	[paramAPI getFloatValue:&cellNoise fromParameter:kParamID_CellNoise atTime:renderTime];
 	state.cellNoise = cellNoise * 100.0;
+	double colorNoise = 0.0;
+	[paramAPI getFloatValue:&colorNoise fromParameter:kParamID_ColorNoise atTime:renderTime];
+	state.colorNoise = colorNoise * 100.0;
+	BOOL enableDistort = YES, enableBlur = YES, enableMosaic = YES;
+	[paramAPI getBoolValue:&enableDistort fromParameter:kParamID_EnableDistort atTime:renderTime];
+	[paramAPI getBoolValue:&enableBlur fromParameter:kParamID_EnableBlur atTime:renderTime];
+	[paramAPI getBoolValue:&enableMosaic fromParameter:kParamID_EnableMosaic atTime:renderTime];
+	state.enableDistort = enableDistort ? 1 : 0;
+	state.enableBlur = enableBlur ? 1 : 0;
+	state.enableMosaic = enableMosaic ? 1 : 0;
 	state.blackout = blackoutState ? 1 : 0;
 	[paramAPI getBoolValue:&blurAfterMosaicState fromParameter:kParamID_BlurAfterMosaic atTime:renderTime];
 	state.blurAfterMosaic = blurAfterMosaicState ? 1 : 0;
@@ -404,18 +446,24 @@ typedef struct { int width; int height; int tileOffsetX; int tileOffsetY; } Anon
 	params.m16f = 0;
 	params.mWidth = width;
 	params.mHeight = height;
-	params.mBlurRadius = (int)fminf(ceilf((float)state.blurRadius * ds), 512.0f);
+	const float blurRadius = AnonAlgo::LayerStrength(state.blurRadius, BLUR_RADIUS_MIN,
+		state.enableBlur != 0, ds, 0.0f);
+	params.mBlurRadius = (int)fminf(ceilf(blurRadius), 512.0f);
 	params.mBlurDir = 0;
-	params.mDistortAmount = (float)state.distortAmount * ds;
+	params.mDistortAmount = AnonAlgo::LayerStrength(state.distortAmount, DISTORT_AMOUNT_MIN,
+		state.enableDistort != 0, ds, 0.0f);
 	params.mDistortScale = fmaxf((float)state.distortScale * ds, 2.0f);
-	params.mBlurSigma = fmaxf((float)state.blurRadius * ds * 0.5f, 0.1f);
-	params.mMosaicSize = (float)state.mosaicSize * ds;
+	params.mBlurSigma = fmaxf(blurRadius * 0.5f, 0.1f);
+	// 1 px blocks disable the mosaic pass (and with it the cell/colour noise).
+	params.mMosaicSize = AnonAlgo::LayerStrength(state.mosaicSize, MOSAIC_SIZE_MIN,
+		state.enableMosaic != 0, ds, 1.0f);
 	params.mMosaicShape = state.mosaicShape;
 	params.mSeed = state.seed;
 	AnonAlgo::DisplacementBias(width, height, params.mDistortScale, params.mSeed,
 		&params.mDistortBiasDx, &params.mDistortBiasDy);
 	params.mDesaturate = (float)(state.desaturate / 100.0);
 	params.mCellNoise = (float)(state.cellNoise / 100.0);
+	params.mColorNoise = (float)(state.colorNoise / 100.0);
 	params.mChannelOrder = ANON_ORDER_RGBA; // texture reads are always RGBA
 
 	id<MTLCommandBuffer> commandBuffer = [cache.queue commandBuffer];

@@ -21,9 +21,12 @@
 #include <algorithm>
 
 /*
-** Parameter ranges and defaults, shared by both host UIs.
+** Parameter ranges and defaults, shared by both host UIs. The minimums of
+** the three layer strengths sit 30 % below their defaults, so a slider
+** cannot quietly weaken a layer past that; the Distortion / Blur / Mosaic
+** checkboxes switch a layer off entirely instead (for previewing).
 */
-#define DISTORT_AMOUNT_MIN   0.0
+#define DISTORT_AMOUNT_MIN   13.0
 #define DISTORT_AMOUNT_MAX   200.0
 #define DISTORT_AMOUNT_DFLT  18.0
 
@@ -31,7 +34,7 @@
 #define DISTORT_SCALE_MAX    400.0
 #define DISTORT_SCALE_DFLT   11.0
 
-#define BLUR_RADIUS_MIN      0.0
+#define BLUR_RADIUS_MIN      13.0
 #define BLUR_RADIUS_MAX      100.0
 #define BLUR_RADIUS_DFLT     18.0
 #define BLUR_AFTER_MOSAIC_RADIUS_DFLT 40.0
@@ -39,7 +42,7 @@
 #define BLUR_RADIUS_LEGACY_DFLT             15.0
 #define BLUR_AFTER_MOSAIC_RADIUS_LEGACY_DFLT 35.0
 
-#define MOSAIC_SIZE_MIN      1.0
+#define MOSAIC_SIZE_MIN      21.0
 #define MOSAIC_SIZE_MAX      256.0
 #define MOSAIC_SIZE_DFLT     30.0
 
@@ -58,6 +61,12 @@
 #define CELL_NOISE_MIN       0.0
 #define CELL_NOISE_MAX       25.0
 #define CELL_NOISE_DFLT      3.0
+
+/* Independent per-channel offset per mosaic cell, in percent of full range
+** (max +/-): shifts each cell's hue as well as its brightness. */
+#define COLOR_NOISE_MIN      0.0
+#define COLOR_NOISE_MAX      25.0
+#define COLOR_NOISE_DFLT     0.0
 
 /*
 ** Pixel-space parameters are specified at a 1080p reference and scaled by
@@ -120,6 +129,13 @@ static inline uint32_t AnonComputeSeed(double inSeedParam, bool inJitter, int32_
 
 namespace AnonAlgo
 {
+
+// Effective layer strength in pixels: raises values saved below the slider
+// minimum (older projects) and returns `off` when the layer is switched off.
+inline float LayerStrength(double value, double minValue, bool enabled, float ds, float off)
+{
+	return enabled ? (float)std::max(value, minValue) * ds : off;
+}
 
 // Switch between the two blur defaults on user checkbox changes.
 // Preserve other values; loading a project and rendering do not rewrite settings.
@@ -416,11 +432,20 @@ inline float CellOffset(int sx, int sy, uint32_t seed, float amount)
 	return (Rand01(sx, sy, seed, 7u) * 2.0f - 1.0f) * amount;
 }
 
+// Seeded offset for buffer channel c of the cell sampled at (sx, sy), in
+// [-amount, amount]. Keep in sync with AnonColorOffset in the MSL.
+inline float ColorOffset(int sx, int sy, uint32_t seed, int c, float amount)
+{
+	return (Rand01(sx, sy, seed, 8u + (uint32_t)c) * 2.0f - 1.0f) * amount;
+}
+
 // cellNoise (0..1 of full range) shifts each cell's colour channels by one
-// seeded offset, floored at 0, so cell values no longer equal the averaged
+// seeded offset, and colorNoise adds a separate offset per channel; both are
+// floored at 0, so cell values no longer equal the averaged
 // source colours. alpha is left untouched.
 inline void MosaicPass(const float* src, float* dst, int w, int h, float blockSize, int shape,
-	uint32_t seed = 0u, float cellNoise = 0.0f, int channelOrder = ANON_ORDER_RGBA)
+	uint32_t seed = 0u, float cellNoise = 0.0f, int channelOrder = ANON_ORDER_RGBA,
+	float colorNoise = 0.0f)
 {
 	int b = std::max(1, (int)(blockSize + 0.5f));
 	if (b <= 1)
@@ -453,12 +478,12 @@ inline void MosaicPass(const float* src, float* dst, int w, int h, float blockSi
 			out[1] = p[1];
 			out[2] = p[2];
 			out[3] = p[3];
-			if (cellNoise > 0.0f)
+			if (cellNoise > 0.0f || colorNoise > 0.0f)
 			{
 				const float o = CellOffset(sx, sy, seed, cellNoise);
 				for (int c = 0; c < 4; ++c)
 					if (c != alpha)
-						out[c] = std::max(out[c] + o, 0.0f);
+						out[c] = std::max(out[c] + o + ColorOffset(sx, sy, seed, c, colorNoise), 0.0f);
 			}
 		}
 	}
@@ -498,17 +523,17 @@ inline void DesaturatePass(float* buf, int w, int h, float amount, int channelOr
 }
 
 // Runs the full stack in place on a packed float buffer, using the caller's
-// scratch buffer of the same size. Result lands in `buf`. desaturate and
-// cellNoise are 0..1; channelOrder only matters when either is non-zero.
+// scratch buffer of the same size. Result lands in `buf`. desaturate,
+// cellNoise and colorNoise are 0..1; channelOrder only matters when one is non-zero.
 inline void RunLayeredPasses(float* buf, float* scratch, int w, int h,
 	float amount, float scale, float blurRadius, float mosaicSize, int mosaicShape,
 	uint32_t seed, bool blurAfterMosaic = false, float desaturate = 0.0f,
-	int channelOrder = ANON_ORDER_RGBA, float cellNoise = 0.0f)
+	int channelOrder = ANON_ORDER_RGBA, float cellNoise = 0.0f, float colorNoise = 0.0f)
 {
 	DistortPass(buf, scratch, w, h, amount, scale, seed);
 	if (blurAfterMosaic)
 	{
-		MosaicPass(scratch, buf, w, h, mosaicSize, mosaicShape, seed, cellNoise, channelOrder);
+		MosaicPass(scratch, buf, w, h, mosaicSize, mosaicShape, seed, cellNoise, channelOrder, colorNoise);
 		BlurPass(buf, scratch, w, h, blurRadius, 0);
 		BlurPass(scratch, buf, w, h, blurRadius, 1);
 	}
@@ -516,7 +541,7 @@ inline void RunLayeredPasses(float* buf, float* scratch, int w, int h,
 	{
 		BlurPass(scratch, buf, w, h, blurRadius, 0);
 		BlurPass(buf, scratch, w, h, blurRadius, 1);
-		MosaicPass(scratch, buf, w, h, mosaicSize, mosaicShape, seed, cellNoise, channelOrder);
+		MosaicPass(scratch, buf, w, h, mosaicSize, mosaicShape, seed, cellNoise, channelOrder, colorNoise);
 	}
 	DesaturatePass(buf, w, h, desaturate, channelOrder);
 }

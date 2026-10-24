@@ -33,6 +33,7 @@ struct AnonRenderSettings
 	bool blurAfterMosaic;
 	float desaturate; // 0..1
 	float cellNoise; // 0..1
+	float colorNoise; // 0..1
 };
 
 
@@ -157,6 +158,7 @@ void RunMetalAnonymizer(void* p_CmdQ, int p_Width, int p_Height,
 	params.mDistortBiasDy = distortBiasDy;
 	params.mDesaturate = p_Settings.desaturate;
 	params.mCellNoise = p_Settings.cellNoise;
+	params.mColorNoise = p_Settings.colorNoise;
 	params.mChannelOrder = ANON_ORDER_RGBA;
 
 	id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];

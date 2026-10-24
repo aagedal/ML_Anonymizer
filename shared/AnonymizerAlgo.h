@@ -25,20 +25,23 @@
 */
 #define DISTORT_AMOUNT_MIN   0.0
 #define DISTORT_AMOUNT_MAX   200.0
-#define DISTORT_AMOUNT_DFLT  15.0
+#define DISTORT_AMOUNT_DFLT  18.0
 
 #define DISTORT_SCALE_MIN    4.0
 #define DISTORT_SCALE_MAX    400.0
-#define DISTORT_SCALE_DFLT   10.0
+#define DISTORT_SCALE_DFLT   11.0
 
 #define BLUR_RADIUS_MIN      0.0
 #define BLUR_RADIUS_MAX      100.0
-#define BLUR_RADIUS_DFLT     15.0
-#define BLUR_AFTER_MOSAIC_RADIUS_DFLT 35.0
+#define BLUR_RADIUS_DFLT     18.0
+#define BLUR_AFTER_MOSAIC_RADIUS_DFLT 40.0
+/* Earlier blur defaults, still paired up for older projects. */
+#define BLUR_RADIUS_LEGACY_DFLT             15.0
+#define BLUR_AFTER_MOSAIC_RADIUS_LEGACY_DFLT 35.0
 
 #define MOSAIC_SIZE_MIN      1.0
 #define MOSAIC_SIZE_MAX      256.0
-#define MOSAIC_SIZE_DFLT     25.0
+#define MOSAIC_SIZE_DFLT     30.0
 
 /* 2^24 - 1: the largest range a float slider (AE valid_max is a float)
 ** can step through exactly, and well inside every host's int range. */
@@ -120,12 +123,17 @@ namespace AnonAlgo
 
 // Switch between the two blur defaults on user checkbox changes.
 // Preserve other values; loading a project and rendering do not rewrite settings.
+// Projects saved with the older 15/35 defaults keep switching between those.
 inline double BlurRadiusForOrderChange(double radius, bool blurAfterMosaic)
 {
 	if (blurAfterMosaic && radius == BLUR_RADIUS_DFLT)
 		return BLUR_AFTER_MOSAIC_RADIUS_DFLT;
 	if (!blurAfterMosaic && radius == BLUR_AFTER_MOSAIC_RADIUS_DFLT)
 		return BLUR_RADIUS_DFLT;
+	if (blurAfterMosaic && radius == BLUR_RADIUS_LEGACY_DFLT)
+		return BLUR_AFTER_MOSAIC_RADIUS_LEGACY_DFLT;
+	if (!blurAfterMosaic && radius == BLUR_AFTER_MOSAIC_RADIUS_LEGACY_DFLT)
+		return BLUR_RADIUS_LEGACY_DFLT;
 	return radius;
 }
 

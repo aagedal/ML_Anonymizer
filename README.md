@@ -35,10 +35,10 @@ but they do not guarantee that identifying information is unrecoverable.
 
 | Parameter | Default | Notes |
 |---|---|---|
-| Distortion Amount | 15 | Maximum displacement of the warp field |
-| Distortion Scale | 10 | Size of the noise features |
-| Blur Radius | 15 | Gaussian radius (sigma = radius/2) |
-| Mosaic Block Size | 25 | Pixelation block size |
+| Distortion Amount | 18 | Maximum displacement of the warp field |
+| Distortion Scale | 11 | Size of the noise features |
+| Blur Radius | 18 | Gaussian radius (sigma = radius/2) |
+| Mosaic Block Size | 30 | Pixelation block size |
 | Mosaic Shape | Square | Square, Triangle, or Hexagon tiling |
 | Cell Noise | 3 % | Random brightness offset per mosaic cell (up to ±25 % of full range) |
 | Blur After Mosaic | Off | Runs distortion → mosaic → blur to soften visible cell edges |
@@ -50,8 +50,9 @@ but they do not guarantee that identifying information is unrecoverable.
 | Desaturate | 0 % | Removes colour (Rec. 709 luma), e.g. to hide skin tone or clothing colour |
 
 Enable **Blur After Mosaic** for a softer appearance with less visible tiling.
-Enabling it raises Blur Radius from the default 15 to 35; customized values are
-preserved. Turning it off changes 35 back to 15 and preserves other values.
+Enabling it raises Blur Radius from the default 18 to 40; customized values are
+preserved. Turning it off changes 40 back to 18 and preserves other values.
+Projects that still use the earlier 15/35 defaults switch between those instead.
 Increase Blur Radius if cell
 edges remain obvious. The default order stays
 distortion → blur → mosaic; with a zero blur radius, both orders match.

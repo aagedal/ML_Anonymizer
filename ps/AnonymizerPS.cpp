@@ -120,6 +120,10 @@ static void InitParameters(PSParameters* p)
 	p->blurAfterMosaic = false;
 	p->desaturate = DESATURATE_DFLT;
 	p->cellNoise = CELL_NOISE_DFLT;
+	p->colorNoise = COLOR_NOISE_DFLT;
+	p->enableDistort = 1;
+	p->enableBlur = 1;
+	p->enableMosaic = 1;
 }
 
 /*
@@ -350,10 +354,14 @@ static void DoFilterImpl(uint32_t seed)
 	const VPoint imageSize = GetImageSize();
 	const float ds = AnonResolutionScale((int)imageSize.h, (int)imageSize.v);
 
-	const float amount = (float)gParams->distortAmount * ds;
+	const float amount = AnonAlgo::LayerStrength(gParams->distortAmount, DISTORT_AMOUNT_MIN,
+		gParams->enableDistort != 0, ds, 0.0f);
 	const float scale = std::max((float)gParams->distortScale * ds, 2.0f);
-	const float blurRadius = std::min((float)gParams->blurRadius * ds, 512.0f);
-	const float mosaicSize = std::max((float)gParams->mosaicSize * ds, 1.0f);
+	const float blurRadius = std::min(AnonAlgo::LayerStrength(gParams->blurRadius, BLUR_RADIUS_MIN,
+		gParams->enableBlur != 0, ds, 0.0f), 512.0f);
+	/* 1 px blocks disable the mosaic pass (and with it the cell/colour noise). */
+	const float mosaicSize = std::max(AnonAlgo::LayerStrength(gParams->mosaicSize, MOSAIC_SIZE_MIN,
+		gParams->enableMosaic != 0, ds, 1.0f), 1.0f);
 	int mosaicShape = (int)gParams->mosaicShape;
 	if (mosaicShape < ANON_SHAPE_SQUARE || mosaicShape > ANON_SHAPE_HEXAGON)
 		mosaicShape = ANON_SHAPE_SQUARE;
@@ -361,6 +369,7 @@ static void DoFilterImpl(uint32_t seed)
 	const float desaturate = IsGrayMode(gFilterRecord->imageMode)
 		? 0.0f : (float)(gParams->desaturate / 100.0);
 	const float cellNoise = (float)(gParams->cellNoise / 100.0);
+	const float colorNoise = (float)(gParams->colorNoise / 100.0);
 
 	float* buf = (float*)malloc((size_t)w * h * 4 * sizeof(float));
 	float* scratch = NULL; /* allocated only if the CPU fallback runs */
@@ -431,7 +440,7 @@ static void DoFilterImpl(uint32_t seed)
 	}
 	else if (!RunMetalPasses(buf, (int)w, (int)h,
 				amount, scale, blurRadius, mosaicSize, mosaicShape, seed,
-				gParams->blurAfterMosaic != 0, desaturate, cellNoise))
+				gParams->blurAfterMosaic != 0, desaturate, cellNoise, colorNoise))
 	{
 		scratch = (float*)malloc((size_t)w * h * 4 * sizeof(float));
 		if (scratch == NULL)
@@ -441,7 +450,7 @@ static void DoFilterImpl(uint32_t seed)
 		}
 		AnonAlgo::RunLayeredPasses(buf, scratch, (int)w, (int)h,
 			amount, scale, blurRadius, mosaicSize, mosaicShape, seed,
-			gParams->blurAfterMosaic != 0, desaturate, ANON_ORDER_RGBA, cellNoise);
+			gParams->blurAfterMosaic != 0, desaturate, ANON_ORDER_RGBA, cellNoise, colorNoise);
 	}
 
 	/* Write the result back band by band. */

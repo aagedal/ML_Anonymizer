@@ -15,7 +15,9 @@ effect:
    tiling (a purely cosmetic choice — all three sample the same way). Each
    cell then gets a small seeded brightness offset (**Cell Noise**), so cell
    colours no longer equal the source averages that block-matching
-   depixelation tools such as Depix compare against.
+   depixelation tools such as Depix compare against. **Colour Noise**
+   optionally adds a separate offset per colour channel, shifting each cell's
+   hue as well.
 
 | Before | After (default settings) |
 |---|---|
@@ -35,12 +37,14 @@ but they do not guarantee that identifying information is unrecoverable.
 
 | Parameter | Default | Notes |
 |---|---|---|
-| Distortion Amount | 18 | Maximum displacement of the warp field |
+| Enable Distortion / Blur / Mosaic | On | Switch a layer off to preview the others |
+| Distortion Amount | 18 | Maximum displacement of the warp field (minimum 13) |
 | Distortion Scale | 11 | Size of the noise features |
-| Blur Radius | 18 | Gaussian radius (sigma = radius/2) |
-| Mosaic Block Size | 30 | Pixelation block size |
+| Blur Radius | 18 | Gaussian radius, sigma = radius/2 (minimum 13) |
+| Mosaic Block Size | 30 | Pixelation block size (minimum 21) |
 | Mosaic Shape | Square | Square, Triangle, or Hexagon tiling |
 | Cell Noise | 3 % | Random brightness offset per mosaic cell (up to ±25 % of full range) |
+| Colour Noise | 0 % | Random per-channel offset per mosaic cell (up to ±25 % of full range) |
 | Blur After Mosaic | Off | Runs distortion → mosaic → blur to soften visible cell edges |
 | Random Seed | 0 | Change for a different distortion pattern (0–16,777,215) |
 | Randomize Seed | — | Button: picks a new random seed |
@@ -55,7 +59,7 @@ preserved. Turning it off changes 40 back to 18 and preserves other values.
 Projects that still use the earlier 15/35 defaults switch between those instead.
 Increase Blur Radius if cell
 edges remain obvious. The default order stays
-distortion → blur → mosaic; with a zero blur radius, both orders match.
+distortion → blur → mosaic; with Blur turned off, both orders match.
 
 Pixel-space parameters are specified **at a 1080p reference** and scale with
 the shorter frame dimension, so the anonymization strength is identical at
@@ -63,18 +67,13 @@ the shorter frame dimension, so the anonymization strength is identical at
 output automatically.
 
 The defaults are tuned so a close-up face, where the face fills much of the
-frame, loses its identifying features. Lowering them trades protection for
-looks. As a rule, don't go more than 30 % below the defaults:
-
-| Parameter | Default | Recommended minimum |
-|---|---|---|
-| Distortion Amount | 18 | 13 |
-| Blur Radius | 18 | 13 |
-| Blur Radius (Blur After Mosaic) | 40 | 28 |
-| Mosaic Block Size | 30 | 21 |
-
-Smaller faces in wider shots are covered by fewer cells, so they tolerate
-lower values; check the result at full resolution before going below these.
+frame, loses its identifying features. Distortion Amount, Blur Radius and
+Mosaic Block Size cannot be set more than 30 % below their defaults (13, 13
+and 21); projects saved with lower values render at the minimum. With Blur
+After Mosaic on, keep Blur Radius at 28 or above. To see what each layer
+contributes, switch layers off with the Enable Distortion / Blur / Mosaic
+checkboxes rather than lowering the sliders, and switch them back on before
+rendering.
 
 Blackout is the zero-information option: nothing of the covered pixels
 survives, so use it (with an effect mask) when the region must be provably
@@ -330,6 +329,6 @@ ctest --test-dir build --output-on-failure
 ```
 
 The CPU checks cover both processing orders, all mosaic shapes, zero and
-fractional blur radii, desaturation, cell noise, and small or odd frame sizes. When the Photoshop SDK is
+fractional blur radii, desaturation, cell and colour noise, and small or odd frame sizes. When the Photoshop SDK is
 available, the Metal checks also compare GPU output with the CPU reference;
 these require access to a Metal device. Set `-DBUILD_TESTING=OFF` to omit tests.

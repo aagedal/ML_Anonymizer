@@ -56,7 +56,32 @@ int main()
 			check(std::abs(p[0] - 0.5f) <= 0.05f + 1e-6f, "Cell offset out of range");
 			check(p[3] == 0.5f, "Cell noise must not touch alpha");
 		}
+		// Colour noise: per-channel offsets, uniform per cell, alpha untouched.
+		std::vector<float> tinted(flat.size());
+		AnonAlgo::MosaicPass(flat.data(), tinted.data(), w, h, 10.0f, ANON_SHAPE_SQUARE, 42u, 0.0f,
+			ANON_ORDER_RGBA, 0.05f);
+		bool hueShift = false;
+		for (int y = 0; y < h; ++y)
+		for (int x = 0; x < w; ++x)
+		{
+			const float* p = &tinted[((size_t)y * w + x) * 4];
+			const float* c = &tinted[((size_t)(y / 10 * 10) * w + x / 10 * 10) * 4];
+			for (int ch = 0; ch < 3; ++ch)
+			{
+				check(p[ch] == c[ch], "Colour offset should be uniform per cell");
+				check(std::abs(p[ch] - 0.5f) <= 0.05f + 1e-6f, "Colour offset out of range");
+			}
+			check(p[3] == 0.5f, "Colour noise must not touch alpha");
+			hueShift = hueShift || p[0] != p[1] || p[1] != p[2];
+		}
+		check(hueShift, "Colour noise should offset channels independently");
 	}
+	check(AnonAlgo::LayerStrength(5.0, 13.0, true, 2.0f, 0.0f) == 26.0f,
+		"Values below the minimum should be raised to it");
+	check(AnonAlgo::LayerStrength(20.0, 13.0, true, 2.0f, 0.0f) == 40.0f,
+		"Values above the minimum should only be scaled");
+	check(AnonAlgo::LayerStrength(20.0, 13.0, false, 2.0f, 1.0f) == 1.0f,
+		"A disabled layer should return its off value");
 	int cases = 0;
 	for (auto size : {std::pair<int, int>{1, 1}, {7, 3}, {31, 23}})
 	for (int shape = 0; shape < 3; ++shape)
@@ -72,12 +97,13 @@ int main()
 		for (bool after : {false, true})
 		for (float desat : {0.0f, 0.6f})
 		for (float noise : {0.0f, 0.05f})
+		for (float tint : {0.0f, 0.04f})
 		{
 			// Explicit reference stages verify ordering and final buffer ownership.
 			AnonAlgo::DistortPass(input.data(), a.data(), w, h, amount, 5.0f, 42u);
 			if (after)
 			{
-				AnonAlgo::MosaicPass(a.data(), b.data(), w, h, block, shape, 42u, noise);
+				AnonAlgo::MosaicPass(a.data(), b.data(), w, h, block, shape, 42u, noise, ANON_ORDER_RGBA, tint);
 				AnonAlgo::BlurPass(b.data(), a.data(), w, h, radius, 0);
 				AnonAlgo::BlurPass(a.data(), b.data(), w, h, radius, 1);
 			}
@@ -85,15 +111,15 @@ int main()
 			{
 				AnonAlgo::BlurPass(a.data(), b.data(), w, h, radius, 0);
 				AnonAlgo::BlurPass(b.data(), a.data(), w, h, radius, 1);
-				AnonAlgo::MosaicPass(a.data(), b.data(), w, h, block, shape, 42u, noise);
+				AnonAlgo::MosaicPass(a.data(), b.data(), w, h, block, shape, 42u, noise, ANON_ORDER_RGBA, tint);
 			}
 			AnonAlgo::DesaturatePass(b.data(), w, h, desat, ANON_ORDER_RGBA);
 			a = input;
 			AnonAlgo::RunLayeredPasses(a.data(), scratch.data(), w, h,
 				amount, 5.0f, radius, block, shape, 42u, after, desat,
-				ANON_ORDER_RGBA, noise);
+				ANON_ORDER_RGBA, noise, tint);
 			check(a == b, "CPU stage order differs from reference");
-			if (!after && desat == 0.0f && noise == 0.0f)
+			if (!after && desat == 0.0f && noise == 0.0f && tint == 0.0f)
 			{
 				a = input;
 				AnonAlgo::RunLayeredPasses(a.data(), scratch.data(), w, h,
@@ -103,7 +129,7 @@ int main()
 #ifdef ANON_TEST_METAL
 			a = input;
 			check(RunMetalPasses(a.data(), w, h, amount, 5.0f, radius, block,
-				shape, 42u, after, desat, noise), "Metal pipeline failed");
+				shape, 42u, after, desat, noise, tint), "Metal pipeline failed");
 			for (size_t i = 0; i < a.size(); ++i)
 				check(std::isfinite(a[i]) && std::abs(a[i] - b[i]) < 2e-5f,
 					"CPU/Metal output differs");
@@ -121,5 +147,5 @@ int main()
 			check(a == b, "Zero blur should make both orders identical");
 		}
 	}
-	std::printf("Passed %d processing-order/desaturation/cell-noise cases\n", cases);
+	std::printf("Passed %d processing-order/desaturation/cell- and colour-noise cases\n", cases);
 }

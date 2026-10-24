@@ -60,6 +60,7 @@ struct AnonRenderSettings
 	bool blurAfterMosaic;
 	float desaturate; // 0..1
 	float cellNoise; // 0..1
+	float colorNoise; // 0..1
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -155,7 +156,7 @@ void AnonymizerProcessor::computeFullCPU()
 		_settings.distortAmount, _settings.distortScale,
 		_settings.blurRadius, _settings.mosaicSize, _settings.mosaicShape,
 		_settings.seed, _settings.blurAfterMosaic, _settings.desaturate, ANON_ORDER_RGBA,
-		_settings.cellNoise);
+		_settings.cellNoise, _settings.colorNoise);
 }
 
 void AnonymizerProcessor::multiThreadProcessImages(OfxRectI p_ProcWindow)
@@ -199,6 +200,10 @@ public:
 		m_BlurAfterMosaic = fetchBooleanParam("blurAfterMosaic");
 		m_Desaturate = fetchDoubleParam("desaturate");
 		m_CellNoise = fetchDoubleParam("cellNoise");
+		m_ColorNoise = fetchDoubleParam("colorNoise");
+		m_EnableDistort = fetchBooleanParam("enableDistort");
+		m_EnableBlur = fetchBooleanParam("enableBlur");
+		m_EnableMosaic = fetchBooleanParam("enableMosaic");
 		m_SessionKey = fetchBooleanParam("sessionKey");
 	}
 
@@ -261,10 +266,15 @@ public:
 		const float ds = AnonResolutionScale(dstBounds.x2 - dstBounds.x1, dstBounds.y2 - dstBounds.y1);
 
 		AnonRenderSettings settings = {};
-		settings.distortAmount = (float)m_DistortAmount->getValueAtTime(p_Args.time) * ds;
-		settings.distortScale = std::max((float)m_DistortScale->getValueAtTime(p_Args.time) * ds, 2.0f);
-		settings.blurRadius = (float)m_BlurRadius->getValueAtTime(p_Args.time) * ds;
-		settings.mosaicSize = (float)m_MosaicSize->getValueAtTime(p_Args.time) * ds;
+		const double t = p_Args.time;
+		settings.distortAmount = AnonAlgo::LayerStrength(m_DistortAmount->getValueAtTime(t),
+			DISTORT_AMOUNT_MIN, m_EnableDistort->getValueAtTime(t), ds, 0.0f);
+		settings.distortScale = std::max((float)m_DistortScale->getValueAtTime(t) * ds, 2.0f);
+		settings.blurRadius = AnonAlgo::LayerStrength(m_BlurRadius->getValueAtTime(t),
+			BLUR_RADIUS_MIN, m_EnableBlur->getValueAtTime(t), ds, 0.0f);
+		// 1 px blocks disable the mosaic pass (and with it the cell/colour noise).
+		settings.mosaicSize = AnonAlgo::LayerStrength(m_MosaicSize->getValueAtTime(t),
+			MOSAIC_SIZE_MIN, m_EnableMosaic->getValueAtTime(t), ds, 1.0f);
 		settings.blackout = m_Blackout->getValueAtTime(p_Args.time);
 		settings.blurAfterMosaic = m_BlurAfterMosaic->getValueAtTime(p_Args.time);
 		int shape = ANON_SHAPE_SQUARE;
@@ -280,6 +290,7 @@ public:
 			sessionKey ? AnonAlgo::SessionKey() : 0u);
 		settings.desaturate = (float)(m_Desaturate->getValueAtTime(p_Args.time) / 100.0);
 		settings.cellNoise = (float)(m_CellNoise->getValueAtTime(p_Args.time) / 100.0);
+		settings.colorNoise = (float)(m_ColorNoise->getValueAtTime(p_Args.time) / 100.0);
 
 		p_Processor.setDstImg(dst.get());
 		p_Processor.setSrcImg(src.get());
@@ -303,6 +314,10 @@ public:
 	OFX::BooleanParam* m_BlurAfterMosaic;
 	OFX::DoubleParam* m_Desaturate;
 	OFX::DoubleParam* m_CellNoise;
+	OFX::DoubleParam* m_ColorNoise;
+	OFX::BooleanParam* m_EnableDistort;
+	OFX::BooleanParam* m_EnableBlur;
+	OFX::BooleanParam* m_EnableMosaic;
 	OFX::BooleanParam* m_SessionKey;
 };
 
@@ -359,15 +374,23 @@ public:
 
 		PageParamDescriptor* page = p_Desc.definePageParam("Controls");
 
+		// The strength sliders stop at their minimums; these switch a layer
+		// off entirely, for previewing the others.
+		page->addChild(*defineEnable(p_Desc, "enableDistort", "Enable Distortion",
+			"Turn off to preview the result without the distortion layer"));
 		page->addChild(*defineDouble(p_Desc, "distortAmount", "Distortion Amount",
 			"Maximum displacement of the random warp field, in pixels",
 			DISTORT_AMOUNT_MIN, DISTORT_AMOUNT_MAX, DISTORT_AMOUNT_DFLT));
 		page->addChild(*defineDouble(p_Desc, "distortScale", "Distortion Scale",
 			"Size of the warp noise features, in pixels",
 			DISTORT_SCALE_MIN, DISTORT_SCALE_MAX, DISTORT_SCALE_DFLT));
+		page->addChild(*defineEnable(p_Desc, "enableBlur", "Enable Blur",
+			"Turn off to preview the result without the blur layer"));
 		page->addChild(*defineDouble(p_Desc, "blurRadius", "Blur Radius",
 			"Gaussian blur radius, in pixels",
 			BLUR_RADIUS_MIN, BLUR_RADIUS_MAX, BLUR_RADIUS_DFLT));
+		page->addChild(*defineEnable(p_Desc, "enableMosaic", "Enable Mosaic",
+			"Turn off to preview the result without the mosaic layer"));
 		page->addChild(*defineDouble(p_Desc, "mosaicSize", "Mosaic Block Size",
 			"Pixelation block size, in pixels",
 			MOSAIC_SIZE_MIN, MOSAIC_SIZE_MAX, MOSAIC_SIZE_DFLT));
@@ -417,6 +440,9 @@ public:
 		page->addChild(*defineDouble(p_Desc, "cellNoise", "Cell Noise",
 			"Random brightness offset per mosaic cell, in percent; defeats block-colour matching",
 			CELL_NOISE_MIN, CELL_NOISE_MAX, CELL_NOISE_DFLT));
+		page->addChild(*defineDouble(p_Desc, "colorNoise", "Colour Noise",
+			"Random per-channel offset per mosaic cell, in percent; shifts each cell's hue",
+			COLOR_NOISE_MIN, COLOR_NOISE_MAX, COLOR_NOISE_DFLT));
 
 		BooleanParamDescriptor* blurAfter = p_Desc.defineBooleanParam("blurAfterMosaic");
 		blurAfter->setLabels("Blur After Mosaic", "Blur After Mosaic", "Blur After Mosaic");
@@ -435,6 +461,16 @@ public:
 	}
 
 private:
+	static BooleanParamDescriptor* defineEnable(OFX::ImageEffectDescriptor& p_Desc,
+		const std::string& p_Name, const std::string& p_Label, const std::string& p_Hint)
+	{
+		BooleanParamDescriptor* param = p_Desc.defineBooleanParam(p_Name);
+		param->setLabels(p_Label, p_Label, p_Label);
+		param->setHint(p_Hint);
+		param->setDefault(true);
+		return param;
+	}
+
 	static DoubleParamDescriptor* defineDouble(OFX::ImageEffectDescriptor& p_Desc,
 		const std::string& p_Name, const std::string& p_Label, const std::string& p_Hint,
 		double p_Min, double p_Max, double p_Default)

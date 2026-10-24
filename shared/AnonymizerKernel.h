@@ -43,6 +43,7 @@ struct AnonParams
 	float desaturate;   // 0..1, applied in the final (mosaic) pass
 	int channelOrder;   // 0 RGBA, 1 BGRA, 2 ARGB
 	float cellNoise;    // 0..1 per-cell brightness offset (mosaic pass)
+	float colorNoise;   // 0..1 per-cell, per-channel offset (mosaic pass)
 };
 
 inline float4 LoadPix(device const uchar* buf, int pitch, int x, int y, int is16f)
@@ -284,6 +285,12 @@ inline float AnonCellOffset(int sx, int sy, uint seed, float amount)
 	return (Rand01(sx, sy, seed, 7u) * 2.0f - 1.0f) * amount;
 }
 
+// Mirrored from AnonAlgo::ColorOffset.
+inline float AnonColorOffset(int sx, int sy, uint seed, int c, float amount)
+{
+	return (Rand01(sx, sy, seed, 8u + uint(c)) * 2.0f - 1.0f) * amount;
+}
+
 // Mirrored from AnonAlgo::LumaWeights / DesaturatePass.
 inline float4 AnonDesaturate(float4 c, float amount, int channelOrder)
 {
@@ -322,11 +329,13 @@ kernel void AnonMosaic(
 		sy = clamp(int(RoundHalfUp(c.y)), 0, p.height - 1);
 	}
 	float4 c = LoadPix(src, p.srcPitch, sx, sy, p.is16f);
-	if (p.cellNoise > 0.0f && b > 1)
+	if ((p.cellNoise > 0.0f || p.colorNoise > 0.0f) && b > 1)
 	{
 		int alpha = p.channelOrder == 2 ? 0 : 3;
 		float a = c[alpha];
-		c = max(c + AnonCellOffset(sx, sy, p.seed, p.cellNoise), 0.0f);
+		float o = AnonCellOffset(sx, sy, p.seed, p.cellNoise);
+		for (int i = 0; i < 4; ++i)
+			c[i] = max(c[i] + o + AnonColorOffset(sx, sy, p.seed, i, p.colorNoise), 0.0f);
 		c[alpha] = a;
 	}
 	if (p.desaturate > 0.0f)
@@ -361,6 +370,7 @@ typedef struct
 	float mDesaturate;
 	int mChannelOrder;
 	float mCellNoise;
+	float mColorNoise;
 } AnonParamsHost;
 
 #endif // ANONYMIZER_KERNEL_H

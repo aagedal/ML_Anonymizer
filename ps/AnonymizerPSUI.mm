@@ -2,8 +2,8 @@
 ** Multi-Layer Anonymizer - Photoshop filter plugin (Cocoa dialog).
 **
 ** Programmatic modal dialog, no xib: a live preview over four slider rows
-** matching the NLE parameters, a mosaic-shape popup, cell-noise and desaturate sliders
-** and a blackout checkbox. The preview reruns the shared pass pipeline on the proxy
+** matching the NLE parameters, layer on/off checkboxes, a mosaic-shape popup,
+** cell-noise, colour-noise and desaturate sliders and a blackout checkbox. The preview reruns the shared pass pipeline on the proxy
 ** buffer on every control change - the proxy is small enough that this is
 ** interactive.
 */
@@ -43,6 +43,10 @@
 	AnonSliderRow* mosaic;
 	AnonSliderRow* desat;
 	AnonSliderRow* cellNoise;
+	AnonSliderRow* colorNoise;
+	NSButton* enableDistort;
+	NSButton* enableBlur;
+	NSButton* enableMosaic;
 	NSPopUpButton* shape;
 	NSButton* blackout;
 	NSButton* blurAfterMosaic;
@@ -98,6 +102,10 @@
 	[shape selectItemAtIndex:ANON_SHAPE_SQUARE];
 	[desat setValue:DESATURATE_DFLT];
 	[cellNoise setValue:CELL_NOISE_DFLT];
+	[colorNoise setValue:COLOR_NOISE_DFLT];
+	enableDistort.state = NSControlStateValueOn;
+	enableBlur.state = NSControlStateValueOn;
+	enableMosaic.state = NSControlStateValueOn;
 	blackout.state = NSControlStateValueOff;
 	blurAfterMosaic.state = NSControlStateValueOff;
 	[self refreshPreview];
@@ -115,6 +123,10 @@
 	p.blurAfterMosaic = blurAfterMosaic.state == NSControlStateValueOn;
 	p.desaturate = [desat value];
 	p.cellNoise = [cellNoise value];
+	p.colorNoise = [colorNoise value];
+	p.enableDistort = enableDistort.state == NSControlStateValueOn;
+	p.enableBlur = enableBlur.state == NSControlStateValueOn;
+	p.enableMosaic = enableMosaic.state == NSControlStateValueOn;
 	return p;
 }
 
@@ -142,13 +154,13 @@
 		if (shapeIdx < ANON_SHAPE_SQUARE || shapeIdx > ANON_SHAPE_HEXAGON)
 			shapeIdx = ANON_SHAPE_SQUARE;
 		AnonAlgo::RunLayeredPasses(work.data(), scratch.data(), pw, ph,
-			(float)p.distortAmount * ds,
+			AnonAlgo::LayerStrength(p.distortAmount, DISTORT_AMOUNT_MIN, p.enableDistort != 0, ds, 0.0f),
 			std::max((float)p.distortScale * ds, 2.0f),
-			std::min((float)p.blurRadius * ds, 512.0f),
-			std::max((float)p.mosaicSize * ds, 1.0f),
+			std::min(AnonAlgo::LayerStrength(p.blurRadius, BLUR_RADIUS_MIN, p.enableBlur != 0, ds, 0.0f), 512.0f),
+			std::max(AnonAlgo::LayerStrength(p.mosaicSize, MOSAIC_SIZE_MIN, p.enableMosaic != 0, ds, 1.0f), 1.0f),
 			shapeIdx, preview.seed, p.blurAfterMosaic != 0,
 			preview.colorPlanes == 1 ? 0.0f : (float)(p.desaturate / 100.0),
-			ANON_ORDER_RGBA, (float)(p.cellNoise / 100.0));
+			ANON_ORDER_RGBA, (float)(p.cellNoise / 100.0), (float)(p.colorNoise / 100.0));
 	}
 
 	NSBitmapImageRep* rep = [[NSBitmapImageRep alloc]
@@ -185,6 +197,18 @@
 
 @end
 
+static NSButton* AddCheckbox(NSView* content, AnonDialogController* controller,
+	NSRect frame, NSString* title, NSString* toolTip, bool on)
+{
+	NSButton* box = [NSButton checkboxWithTitle:title
+		target:controller action:@selector(controlChanged:)];
+	box.frame = frame;
+	box.toolTip = toolTip;
+	box.state = on ? NSControlStateValueOn : NSControlStateValueOff;
+	[content addSubview:box];
+	return box;
+}
+
 static AnonSliderRow* AddSliderRow(NSView* content, AnonDialogController* controller,
 	CGFloat y, NSString* label, double minV, double maxV, double value)
 {
@@ -219,7 +243,7 @@ bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* previewIn)
 	@autoreleasepool
 	{
 		const bool hasPreview = previewIn != NULL && previewIn->pixels != NULL;
-		const CGFloat kControlsHeight = 364;
+		const CGFloat kControlsHeight = 428;
 		const CGFloat kPreviewHeight = hasPreview ? 300 : 0;
 
 		NSWindow* window = [[NSWindow alloc]
@@ -251,22 +275,36 @@ bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* previewIn)
 			controller->preview.pixels = NULL;
 		}
 
-		controller->amount = AddSliderRow(content, controller, 320, @"Distortion Amount:",
+		/* The strength sliders stop at their minimums; these switch a layer
+		** off entirely, for previewing the others. */
+		NSTextField* layersLabel = [NSTextField labelWithString:@"Layers:"];
+		layersLabel.frame = NSMakeRect(16, 384, 150, 20);
+		layersLabel.alignment = NSTextAlignmentRight;
+		[content addSubview:layersLabel];
+		controller->enableDistort = AddCheckbox(content, controller, NSMakeRect(176, 384, 92, 20),
+			@"Distortion", @"Turn off to preview without the distortion layer",
+			ioParams->enableDistort != 0);
+		controller->enableBlur = AddCheckbox(content, controller, NSMakeRect(272, 384, 60, 20),
+			@"Blur", @"Turn off to preview without the blur layer", ioParams->enableBlur != 0);
+		controller->enableMosaic = AddCheckbox(content, controller, NSMakeRect(336, 384, 100, 20),
+			@"Mosaic", @"Turn off to preview without the mosaic layer", ioParams->enableMosaic != 0);
+
+		controller->amount = AddSliderRow(content, controller, 352, @"Distortion Amount:",
 			DISTORT_AMOUNT_MIN, DISTORT_AMOUNT_MAX, ioParams->distortAmount);
-		controller->scale = AddSliderRow(content, controller, 288, @"Distortion Scale:",
+		controller->scale = AddSliderRow(content, controller, 320, @"Distortion Scale:",
 			DISTORT_SCALE_MIN, DISTORT_SCALE_MAX, ioParams->distortScale);
-		controller->blur = AddSliderRow(content, controller, 256, @"Blur Radius:",
+		controller->blur = AddSliderRow(content, controller, 288, @"Blur Radius:",
 			BLUR_RADIUS_MIN, BLUR_RADIUS_MAX, ioParams->blurRadius);
-		controller->mosaic = AddSliderRow(content, controller, 224, @"Mosaic Size:",
+		controller->mosaic = AddSliderRow(content, controller, 256, @"Mosaic Size:",
 			MOSAIC_SIZE_MIN, MOSAIC_SIZE_MAX, ioParams->mosaicSize);
 
 		NSTextField* shapeLabel = [NSTextField labelWithString:@"Mosaic Shape:"];
-		shapeLabel.frame = NSMakeRect(16, 190, 150, 20);
+		shapeLabel.frame = NSMakeRect(16, 222, 150, 20);
 		shapeLabel.alignment = NSTextAlignmentRight;
 		[content addSubview:shapeLabel];
 
 		controller->shape = [[NSPopUpButton alloc]
-			initWithFrame:NSMakeRect(174, 186, 150, 26) pullsDown:NO];
+			initWithFrame:NSMakeRect(174, 218, 150, 26) pullsDown:NO];
 		[controller->shape addItemsWithTitles:@[ @"Square", @"Triangle", @"Hexagon" ]];
 		[controller->shape selectItemAtIndex:
 			(ioParams->mosaicShape >= 0 && ioParams->mosaicShape <= 2)
@@ -275,8 +313,10 @@ bool DoParamDialog(PSParameters* ioParams, const PSPreviewContext* previewIn)
 		controller->shape.action = @selector(controlChanged:);
 		[content addSubview:controller->shape];
 
-		controller->cellNoise = AddSliderRow(content, controller, 158, @"Cell Noise (%):",
+		controller->cellNoise = AddSliderRow(content, controller, 190, @"Cell Noise (%):",
 			CELL_NOISE_MIN, CELL_NOISE_MAX, ioParams->cellNoise);
+		controller->colorNoise = AddSliderRow(content, controller, 158, @"Colour Noise (%):",
+			COLOR_NOISE_MIN, COLOR_NOISE_MAX, ioParams->colorNoise);
 		controller->desat = AddSliderRow(content, controller, 126, @"Desaturate (%):",
 			DESATURATE_MIN, DESATURATE_MAX, ioParams->desaturate);
 
